@@ -22,6 +22,9 @@ import com.nhlfantasygm.data.local.*
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
 import com.nhlfantasygm.domain.SeasonSimulationEngine
 import com.nhlfantasygm.model.*
+import com.nhlfantasygm.multiplayer.MultiplayerUiState
+import com.nhlfantasygm.multiplayer.RoomCrypto
+import com.nhlfantasygm.multiplayer.RoomRole
 import com.nhlfantasygm.ui.LeagueSectionTab
 import com.nhlfantasygm.ui.ScoredPlayerItem
 import com.nhlfantasygm.ui.components.*
@@ -35,6 +38,8 @@ fun LeagueScreen(
     onSelectTab: (LeagueSectionTab) -> Unit,
     fantasyTeams: List<FantasyTeamEntity>,
     humanTeam: FantasyTeamEntity?,
+    controlledTeamId: String = NhlFantasyRepository.USER_TEAM_ID,
+    mpState: MultiplayerUiState = MultiplayerUiState(),
     matchups: List<FantasyMatchupEntity>,
     seasonArchives: List<SeasonArchiveEntity>,
     tradeProposals: List<TradeProposalEntity>,
@@ -55,7 +60,9 @@ fun LeagueScreen(
     onSaveEconomy: (EconomyConfig, Boolean) -> Unit,
     onSaveScoring: (ScoringWeights) -> Unit,
     onToggleOfflineSim: (Boolean) -> Unit,
-    onSaveOptionalApiKey: (String) -> Unit
+    onSaveOptionalApiKey: (String) -> Unit,
+    onSaveCustomRelayUrl: (String) -> Unit = {},
+    onLeaveMultiplayerRoom: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -82,16 +89,21 @@ fun LeagueScreen(
         when (activeTab) {
             LeagueSectionTab.MATCHUPS -> MatchupsAndPlayoffsSection(
                 seasonNumber = settings.currentSeasonNumber,
+                controlledTeamId = controlledTeamId,
+                mpState = mpState,
                 matchups = matchups,
                 onSimulateNextWeek = onSimulateNextWeek,
                 onStartNextSeason = onStartNextSeason
             )
             LeagueSectionTab.STANDINGS -> FantasyStandingsSection(
-                fantasyTeams = fantasyTeams
+                fantasyTeams = fantasyTeams,
+                controlledTeamId = controlledTeamId
             )
             LeagueSectionTab.TRADES -> TradesCenterSection(
                 fantasyTeams = fantasyTeams,
                 humanTeam = humanTeam,
+                controlledTeamId = controlledTeamId,
+                mpState = mpState,
                 allScoredPlayers = allScoredPlayers,
                 tradeProposals = tradeProposals,
                 onProposeTrade = onProposeTrade,
@@ -115,12 +127,15 @@ fun LeagueScreen(
             )
             LeagueSectionTab.SETTINGS -> LeagueSettingsSection(
                 settings = settings,
+                mpState = mpState,
                 savedApiKey = savedOptionalApiKey,
                 onSaveTheme = onSaveTheme,
                 onSaveEconomy = onSaveEconomy,
                 onSaveScoring = onSaveScoring,
                 onToggleOfflineSim = onToggleOfflineSim,
-                onSaveApiKey = onSaveOptionalApiKey
+                onSaveApiKey = onSaveOptionalApiKey,
+                onSaveCustomRelayUrl = onSaveCustomRelayUrl,
+                onLeaveMultiplayerRoom = onLeaveMultiplayerRoom
             )
         }
     }
@@ -129,6 +144,8 @@ fun LeagueScreen(
 @Composable
 private fun MatchupsAndPlayoffsSection(
     seasonNumber: Int,
+    controlledTeamId: String,
+    mpState: MultiplayerUiState,
     matchups: List<FantasyMatchupEntity>,
     onSimulateNextWeek: () -> Unit,
     onStartNextSeason: () -> Unit
@@ -177,12 +194,16 @@ private fun MatchupsAndPlayoffsSection(
                     if (seasonComplete) {
                         Button(
                             onClick = onStartNextSeason,
+                            enabled = mpState.role != RoomRole.GUEST,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = TrophyGold, contentColor = androidx.compose.ui.graphics.Color.Black)
                         ) {
                             Icon(Icons.Default.EmojiEvents, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Launch Fantasy Season ${seasonNumber + 1}", fontWeight = FontWeight.ExtraBold)
+                            Text(
+                                text = if (mpState.role == RoomRole.GUEST) "Waiting on Host for Season ${seasonNumber + 1}" else "Launch Fantasy Season ${seasonNumber + 1}",
+                                fontWeight = FontWeight.ExtraBold
+                            )
                         }
                     } else if (nextWeek != null) {
                         val stageTitle = when (nextWeek) {
@@ -192,11 +213,15 @@ private fun MatchupsAndPlayoffsSection(
                         }
                         Button(
                             onClick = onSimulateNextWeek,
+                            enabled = mpState.role != RoomRole.GUEST,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.FastForward, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Simulate $stageTitle", fontWeight = FontWeight.ExtraBold)
+                            Text(
+                                text = if (mpState.role == RoomRole.GUEST) "Waiting on Host Commissioner ($stageTitle)" else "Simulate $stageTitle",
+                                fontWeight = FontWeight.ExtraBold
+                            )
                         }
                     }
                 }
@@ -266,7 +291,7 @@ private fun MatchupsAndPlayoffsSection(
         }
 
         items(weekMatchups, key = { it.matchupId }) { m ->
-            val involvesUser = m.homeTeamId == NhlFantasyRepository.USER_TEAM_ID || m.awayTeamId == NhlFantasyRepository.USER_TEAM_ID
+            val involvesUser = m.homeTeamId == controlledTeamId || m.awayTeamId == controlledTeamId
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -334,7 +359,8 @@ private fun MatchupsAndPlayoffsSection(
 
 @Composable
 private fun FantasyStandingsSection(
-    fantasyTeams: List<FantasyTeamEntity>
+    fantasyTeams: List<FantasyTeamEntity>,
+    controlledTeamId: String
 ) {
     val ranked = remember(fantasyTeams) { SeasonSimulationEngine.rankStandings(fantasyTeams) }
 
@@ -349,12 +375,26 @@ private fun FantasyStandingsSection(
         items(ranked.indices.toList(), key = { ranked[it].teamId }) { idx ->
             val t = ranked[idx]
             val inPlayoffs = idx < 4
+            val isMe = t.teamId == controlledTeamId
+            val isFriend = !isMe && !t.isCpuGm
+            val ownerTag = when {
+                isMe -> " (You)"
+                t.isRemoteHumanGm -> " (Online Friend${if (t.gmDisplayName.isNotBlank()) ": GM ${t.gmDisplayName}" else ""})"
+                t.isLocalPassAndPlayGm -> " (Local Friend${if (t.gmDisplayName.isNotBlank()) ": GM ${t.gmDisplayName}" else ""})"
+                isFriend -> " (Friend${if (t.gmDisplayName.isNotBlank()) ": GM ${t.gmDisplayName}" else ""})"
+                else -> " (CPU GM)"
+            }
+            val borderColor = when {
+                isMe -> ProfitEmerald
+                isFriend -> IceCyan
+                else -> MaterialTheme.colorScheme.outline
+            }
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(
-                    width = if (t.isHuman) 1.5.dp else 1.dp,
-                    color = if (t.isHuman) ProfitEmerald else MaterialTheme.colorScheme.outline
+                    width = if (isMe || isFriend) 1.5.dp else 1.dp,
+                    color = borderColor
                 )
             ) {
                 Row(
@@ -377,9 +417,10 @@ private fun FantasyStandingsSection(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "${t.teamName}${if (t.isHuman) " (You)" else ""}",
+                            text = "${t.teamName}$ownerTag",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = if (isMe) ProfitEmerald else if (isFriend) IceCyan else MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "PF ${String.format(Locale.CANADA, "%.1f", t.pointsFor)} • PA ${String.format(Locale.CANADA, "%.1f", t.pointsAgainst)}" +
@@ -410,6 +451,8 @@ private fun FantasyStandingsSection(
 private fun TradesCenterSection(
     fantasyTeams: List<FantasyTeamEntity>,
     humanTeam: FantasyTeamEntity?,
+    controlledTeamId: String,
+    mpState: MultiplayerUiState,
     allScoredPlayers: List<ScoredPlayerItem>,
     tradeProposals: List<TradeProposalEntity>,
     onProposeTrade: (String, List<Long>, Long, List<Long>, Long) -> Unit,
@@ -417,23 +460,33 @@ private fun TradesCenterSection(
     onRespondOffer: (Long, Boolean) -> Unit,
     onPlayerClick: (Long) -> Unit
 ) {
-    val cpuTeams = remember(fantasyTeams) { fantasyTeams.filter { !it.isHuman } }
-    var selectedCpuId by remember(cpuTeams) { mutableStateOf(cpuTeams.firstOrNull()?.teamId ?: "") }
-    var offeredIds by remember(selectedCpuId) { mutableStateOf(setOf<Long>()) }
-    var requestedIds by remember(selectedCpuId) { mutableStateOf(setOf<Long>()) }
-    var offeredCashMillions by remember(selectedCpuId) { mutableFloatStateOf(0f) }
-    var requestedCashMillions by remember(selectedCpuId) { mutableFloatStateOf(0f) }
+    val opposingTeams = remember(fantasyTeams, controlledTeamId) {
+        fantasyTeams.filter { it.teamId != controlledTeamId }
+    }
+    var selectedTargetId by remember(opposingTeams) { mutableStateOf(opposingTeams.firstOrNull()?.teamId ?: "") }
+    val selectedTargetTeam = opposingTeams.firstOrNull { it.teamId == selectedTargetId }
+    var offeredIds by remember(selectedTargetId) { mutableStateOf(setOf<Long>()) }
+    var requestedIds by remember(selectedTargetId) { mutableStateOf(setOf<Long>()) }
+    var offeredCashMillions by remember(selectedTargetId) { mutableFloatStateOf(0f) }
+    var requestedCashMillions by remember(selectedTargetId) { mutableFloatStateOf(0f) }
 
-    val userRoster = remember(allScoredPlayers) {
-        allScoredPlayers.filter { it.player.ownerFantasyTeamId == NhlFantasyRepository.USER_TEAM_ID }
+    val userRoster = remember(allScoredPlayers, controlledTeamId) {
+        allScoredPlayers.filter { it.player.ownerFantasyTeamId == controlledTeamId }
             .sortedByDescending { it.player.overallRating }
     }
-    val cpuRoster = remember(allScoredPlayers, selectedCpuId) {
-        allScoredPlayers.filter { it.player.ownerFantasyTeamId == selectedCpuId }
+    val targetRoster = remember(allScoredPlayers, selectedTargetId) {
+        allScoredPlayers.filter { it.player.ownerFantasyTeamId == selectedTargetId }
             .sortedByDescending { it.player.overallRating }
     }
 
-    val pendingIncoming = tradeProposals.filter { it.status == "PENDING" && it.receiverTeamId == NhlFantasyRepository.USER_TEAM_ID }
+    val isHostOrSolo = mpState.role != RoomRole.GUEST
+    val pendingIncoming = tradeProposals.filter { prop ->
+        val receiver = fantasyTeams.firstOrNull { it.teamId == prop.receiverTeamId }
+        prop.status == "PENDING" && (
+            prop.receiverTeamId == controlledTeamId ||
+                (isHostOrSolo && receiver?.isLocalPassAndPlayGm == true)
+            )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -448,10 +501,17 @@ private fun TradesCenterSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("NHL GM Trade Desk", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-                    Text("Player-for-player & Virtual CAD trades with CPU GMs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = if (mpState.isMultiplayerActive) "Live player & Virtual CAD trades with Real Friends & CPU GMs"
+                        else "Player-for-player & Virtual CAD trades with CPU GMs",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                FilledTonalButton(onClick = onSolicitOffer) {
-                    Text("Solicit CPU Offer")
+                if (mpState.role != RoomRole.GUEST && opposingTeams.any { it.isCpuGm }) {
+                    FilledTonalButton(onClick = onSolicitOffer) {
+                        Text("Solicit CPU Offer")
+                    }
                 }
             }
         }
@@ -468,7 +528,17 @@ private fun TradesCenterSection(
                     border = BorderStroke(1.4.dp, TrophyGold)
                 ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("${prop.proposerTeamName} Trade Proposal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                        Text("${prop.proposerTeamName} → ${prop.receiverTeamName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            text = "Offers: ${prop.offeredPlayersSummary}" + (if (prop.offeredCashCad > 0) " + ${CadFormatter.formatCompact(prop.offeredCashCad)}" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ProfitEmerald
+                        )
+                        Text(
+                            text = "Requests: ${prop.requestedPlayersSummary}" + (if (prop.requestedCashCad > 0) " + ${CadFormatter.formatCompact(prop.requestedCashCad)}" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = IceCyan
+                        )
                         Text(prop.gmEvaluationReason, style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
@@ -496,16 +566,19 @@ private fun TradesCenterSection(
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Propose New Trade", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                    Text("1. Target CPU Franchise", style = MaterialTheme.typography.labelLarge, color = IceCyan)
+                    Text("1. Target Franchise (Friends & CPU GMs)", style = MaterialTheme.typography.labelLarge, color = IceCyan)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        cpuTeams.forEach { cpu ->
+                        opposingTeams.forEach { target ->
+                            val tag = if (!target.isCpuGm) "Friend" else "CPU"
                             FilterChip(
-                                selected = selectedCpuId == cpu.teamId,
-                                onClick = { selectedCpuId = cpu.teamId },
-                                label = { Text("${cpu.teamName} (${CadFormatter.formatShortNoSuffix(cpu.cashBalanceCad)})") }
+                                selected = selectedTargetId == target.teamId,
+                                onClick = { selectedTargetId = target.teamId },
+                                label = {
+                                    Text("${target.teamName} • $tag (${CadFormatter.formatShortNoSuffix(target.cashBalanceCad)})")
+                                }
                             )
                         }
                     }
@@ -543,15 +616,20 @@ private fun TradesCenterSection(
                         )
                     }
 
-                    Text("3. CPU Players You Request (${requestedIds.size} selected)", style = MaterialTheme.typography.labelLarge, color = TrophyGold)
-                    if (cpuRoster.isEmpty()) {
-                        Text("CPU team roster will auto-populate when you submit or solicit an offer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("3. Players You Request (${requestedIds.size} selected)", style = MaterialTheme.typography.labelLarge, color = TrophyGold)
+                    if (targetRoster.isEmpty()) {
+                        Text(
+                            text = if (selectedTargetTeam?.isCpuGm == false) "This friend's roster is currently empty."
+                            else "CPU team roster will auto-populate when you submit or solicit an offer.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
                         Row(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            cpuRoster.forEach { item ->
+                            targetRoster.forEach { item ->
                                 val p = item.player
                                 val isSel = p.playerId in requestedIds
                                 FilterChip(
@@ -566,7 +644,7 @@ private fun TradesCenterSection(
                         }
                     }
 
-                    Text("Request Virtual Cash from CPU: $${String.format(Locale.CANADA, "%.1f", requestedCashMillions)}M CAD", style = MaterialTheme.typography.labelMedium)
+                    Text("Request Virtual Cash: $${String.format(Locale.CANADA, "%.1f", requestedCashMillions)}M CAD", style = MaterialTheme.typography.labelMedium)
                     Slider(
                         value = requestedCashMillions,
                         onValueChange = { requestedCashMillions = (it * 2).roundToInt() / 2f },
@@ -575,7 +653,7 @@ private fun TradesCenterSection(
 
                     val offeredValue = userRoster.filter { it.player.playerId in offeredIds }.sumOf { it.player.purchasePriceCad } +
                         (offeredCashMillions * 1_000_000L).toLong()
-                    val reqValue = cpuRoster.filter { it.player.playerId in requestedIds }.sumOf { it.player.purchasePriceCad } +
+                    val reqValue = targetRoster.filter { it.player.playerId in requestedIds }.sumOf { it.player.purchasePriceCad } +
                         (requestedCashMillions * 1_000_000L).toLong()
 
                     Text(
@@ -584,10 +662,11 @@ private fun TradesCenterSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    val isTargetHumanFriend = selectedTargetTeam != null && !selectedTargetTeam.isCpuGm
                     Button(
                         onClick = {
                             onProposeTrade(
-                                selectedCpuId,
+                                selectedTargetId,
                                 offeredIds.toList(),
                                 (offeredCashMillions * 1_000_000L).toLong(),
                                 requestedIds.toList(),
@@ -598,12 +677,16 @@ private fun TradesCenterSection(
                             offeredCashMillions = 0f
                             requestedCashMillions = 0f
                         },
-                        enabled = selectedCpuId.isNotBlank() && (offeredIds.isNotEmpty() || requestedIds.isNotEmpty()),
+                        enabled = selectedTargetId.isNotBlank() && (offeredIds.isNotEmpty() || requestedIds.isNotEmpty()),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.SwapHoriz, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Submit Trade Proposal to CPU GM", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (isTargetHumanFriend) "Send Live Trade Offer to ${selectedTargetTeam?.teamName}"
+                            else "Submit Trade Proposal to CPU GM",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -895,12 +978,15 @@ private fun AwardRow(title: String, winner: String) {
 @Composable
 private fun LeagueSettingsSection(
     settings: UserAppSettings,
+    mpState: MultiplayerUiState,
     savedApiKey: String,
     onSaveTheme: (AppThemeMode) -> Unit,
     onSaveEconomy: (EconomyConfig, Boolean) -> Unit,
     onSaveScoring: (ScoringWeights) -> Unit,
     onToggleOfflineSim: (Boolean) -> Unit,
-    onSaveApiKey: (String) -> Unit
+    onSaveApiKey: (String) -> Unit,
+    onSaveCustomRelayUrl: (String) -> Unit,
+    onLeaveMultiplayerRoom: () -> Unit
 ) {
     var budgetM by remember(settings.economyConfig) { mutableFloatStateOf(settings.economyConfig.startingBudgetCad / 1_000_000f) }
     var capM by remember(settings.economyConfig) { mutableFloatStateOf(settings.economyConfig.salaryCapCad / 1_000_000f) }
@@ -918,6 +1004,7 @@ private fun LeagueSettingsSection(
     var wShutouts by remember(settings.scoringWeights) { mutableFloatStateOf(settings.scoringWeights.goalieShutouts.toFloat()) }
 
     var apiKeyInput by remember(savedApiKey) { mutableStateOf(savedApiKey) }
+    var customRelayInput by remember(mpState.customRelayUrl) { mutableStateOf(mpState.customRelayUrl) }
 
     Column(
         modifier = Modifier
@@ -1043,6 +1130,68 @@ private fun LeagueSettingsSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Apply Custom Scoring Formula", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Multiplayer & Optional Self-Hosted Relay Server Settings
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, IceCyan.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Multiplayer & Custom Relay Server", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Multiplayer drafts & leagues work zero-setup over TLS WebSockets with end-to-end AES-256-GCM encryption derived from your 6-character Room Invite Code. Optionally enter a self-hosted WebSocket relay URL (wss://... running backend/relay-server.js).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = customRelayInput,
+                    onValueChange = { customRelayInput = it },
+                    label = { Text("Optional Custom Relay URL (leave blank for default)") },
+                    placeholder = { Text("wss://your-relay.example.com/ws") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onSaveCustomRelayUrl(customRelayInput) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Save Relay Server")
+                    }
+                    if (customRelayInput.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                customRelayInput = ""
+                                onSaveCustomRelayUrl("")
+                            }
+                        ) {
+                            Text("Use Default")
+                        }
+                    }
+                }
+                if (mpState.isMultiplayerActive) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Active Room: ${RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)} (${mpState.role.name})",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ProfitEmerald
+                        )
+                        OutlinedButton(onClick = onLeaveMultiplayerRoom) {
+                            Text("Leave Room", color = AlertRed)
+                        }
+                    }
                 }
             }
         }

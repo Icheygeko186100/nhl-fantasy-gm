@@ -314,9 +314,11 @@ fun MarketplaceScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
+                val controlledTeamId = humanTeam?.teamId ?: NhlFantasyRepository.USER_TEAM_ID
                 items(players, key = { it.player.playerId }) { item ->
                     MarketplacePlayerCard(
                         item = item,
+                        controlledTeamId = controlledTeamId,
                         showBreakoutNote = filterState.categoryTab == MarketplaceCategoryTab.BREAKOUTS || item.fantasy.isBreakoutCandidate,
                         onCardClick = { onPlayerClick(item.player.playerId) },
                         onBuyClick = { onBuyClick(item.player) },
@@ -332,6 +334,7 @@ fun MarketplaceScreen(
 @Composable
 private fun MarketplacePlayerCard(
     item: ScoredPlayerItem,
+    controlledTeamId: String,
     showBreakoutNote: Boolean,
     onCardClick: () -> Unit,
     onBuyClick: () -> Unit,
@@ -340,8 +343,8 @@ private fun MarketplacePlayerCard(
 ) {
     val p = item.player
     val f = item.fantasy
-    val isUserOwned = p.ownerFantasyTeamId == NhlFantasyRepository.USER_TEAM_ID
-    val isCpuOwned = p.ownerFantasyTeamId != null && !isUserOwned
+    val isUserOwned = p.ownerFantasyTeamId == controlledTeamId
+    val isOtherLeagueOwned = p.ownerFantasyTeamId != null && !isUserOwned
 
     Surface(
         modifier = Modifier
@@ -485,7 +488,7 @@ private fun MarketplacePlayerCard(
                             Text("Sell", fontWeight = FontWeight.Bold, color = WarningAmber)
                         }
                     }
-                    isCpuOwned -> {
+                    isOtherLeagueOwned -> {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = RoyalBlue.copy(alpha = 0.16f)

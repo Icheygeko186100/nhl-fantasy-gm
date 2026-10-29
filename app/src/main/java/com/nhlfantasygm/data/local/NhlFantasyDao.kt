@@ -78,6 +78,9 @@ interface NhlFantasyDao {
     @Query("SELECT * FROM fantasy_teams WHERE teamId = :teamId LIMIT 1")
     suspend fun getFantasyTeamById(teamId: String): FantasyTeamEntity?
 
+    @Query("SELECT * FROM fantasy_teams WHERE teamId = :teamId LIMIT 1")
+    fun observeFantasyTeamById(teamId: String): Flow<FantasyTeamEntity?>
+
     @Query("SELECT * FROM fantasy_teams WHERE isHuman = 1 LIMIT 1")
     fun observeHumanTeam(): Flow<FantasyTeamEntity?>
 
@@ -89,6 +92,12 @@ interface NhlFantasyDao {
 
     @Query("DELETE FROM fantasy_teams WHERE isHuman = 0")
     suspend fun deleteCpuTeams()
+
+    @Query("DELETE FROM fantasy_teams")
+    suspend fun deleteAllFantasyTeams()
+
+    @Query("SELECT * FROM trade_proposals ORDER BY createdAtEpochMs DESC")
+    suspend fun getTradeProposalsOnce(): List<TradeProposalEntity>
 
     // --- Transactions ---
     @Query("SELECT * FROM transactions ORDER BY timestampEpochMs DESC")

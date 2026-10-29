@@ -27,6 +27,7 @@ import java.util.Locale
 @Composable
 fun PlayerDetailDialog(
     detail: PlayerDetailDialogState,
+    controlledTeamId: String = NhlFantasyRepository.USER_TEAM_ID,
     onDismiss: () -> Unit,
     onBuyClick: () -> Unit,
     onSellClick: () -> Unit,
@@ -36,7 +37,7 @@ fun PlayerDetailDialog(
     val p = detail.player
     val f = detail.fantasy
     val v = detail.valuation
-    val isOwnedByUser = p.ownerFantasyTeamId == NhlFantasyRepository.USER_TEAM_ID
+    val isOwnedByUser = p.ownerFantasyTeamId == controlledTeamId
     val isOwnedByCpu = p.ownerFantasyTeamId != null && !isOwnedByUser
 
     Dialog(

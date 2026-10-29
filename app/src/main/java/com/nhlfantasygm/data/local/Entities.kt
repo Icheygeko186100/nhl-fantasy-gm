@@ -210,6 +210,8 @@ data class FantasyTeamEntity(
     val secondaryColorHex: Long,
     val isHuman: Boolean,
     val ownerType: String = if (isHuman) "HUMAN_GM" else "CPU_GM",
+    val gmDisplayName: String = "",
+    val remoteClientId: String = "",
     val cashBalanceCad: Long,
     val startingBudgetCad: Long,
     val wins: Int = 0,
@@ -218,7 +220,11 @@ data class FantasyTeamEntity(
     val pointsFor: Double = 0.0,
     val pointsAgainst: Double = 0.0,
     val championshipsWon: Int = 0
-)
+) {
+    val isCpuGm: Boolean get() = ownerType == "CPU_GM" || !isHuman
+    val isRemoteHumanGm: Boolean get() = ownerType == "REMOTE_HUMAN_GM"
+    val isLocalPassAndPlayGm: Boolean get() = ownerType == "LOCAL_HUMAN_GM"
+}
 
 @Entity(tableName = "transactions")
 data class TransactionEntity(

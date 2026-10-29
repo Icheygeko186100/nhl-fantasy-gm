@@ -1,0 +1,16 @@
+{
+  "name": "nhl-fantasy-gm-multiplayer-relay",
+  "version": "1.1.0",
+  "description": "Zero-knowledge encrypted WebSocket relay server for NHL Fantasy GM multiplayer drafts and leagues",
+  "main": "relay-server.js",
+  "scripts": {
+    "start": "node relay-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

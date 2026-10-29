@@ -27,6 +27,11 @@ import com.nhlfantasygm.domain.TextNormalizer
 import com.nhlfantasygm.model.CadFormatter
 import com.nhlfantasygm.model.DraftConfig
 import com.nhlfantasygm.model.Position
+import com.nhlfantasygm.model.TeamEmblem
+import com.nhlfantasygm.multiplayer.MultiplayerRoomPhase
+import com.nhlfantasygm.multiplayer.MultiplayerUiState
+import com.nhlfantasygm.multiplayer.RoomCrypto
+import com.nhlfantasygm.multiplayer.RoomRole
 import com.nhlfantasygm.ui.PositionFilter
 import com.nhlfantasygm.ui.ScoredPlayerItem
 import com.nhlfantasygm.ui.components.*
@@ -41,6 +46,8 @@ fun DraftScreen(
     draftPicks: List<DraftPickEntity>,
     fantasyTeams: List<FantasyTeamEntity>,
     humanTeam: FantasyTeamEntity?,
+    controlledTeamId: String = NhlFantasyRepository.USER_TEAM_ID,
+    mpState: MultiplayerUiState = MultiplayerUiState(),
     allScoredPlayers: List<ScoredPlayerItem>,
     timerRemainingSeconds: Int,
     onStartDraft: (DraftConfig) -> Unit,
@@ -49,21 +56,93 @@ fun DraftScreen(
     onUndoLastPick: () -> Unit,
     onSimRestOfDraft: () -> Unit,
     onPlayerClick: (Long) -> Unit,
-    onGoToMyTeam: () -> Unit
+    onGoToMyTeam: () -> Unit,
+    onHostMultiplayerRoom: (String, DraftConfig) -> Unit = { _, _ -> },
+    onJoinMultiplayerRoom: (String, String, String, String, TeamEmblem, Long, Long) -> Unit = { _, _, _, _, _, _, _ -> },
+    onBuildMultiplayerShareText: () -> String = { "" },
+    onAddLocalPassAndPlayFriend: (String, String, String, TeamEmblem, Long, Long) -> Unit = { _, _, _, _, _, _ -> },
+    onRemoveLobbyParticipant: (String) -> Unit = {},
+    onMoveLobbyParticipant: (String, Boolean) -> Unit = { _, _ -> },
+    onRandomizeLobbyOrder: () -> Unit = {},
+    onUpdateHostLobbyRules: (DraftConfig, Boolean) -> Unit = { _, _ -> },
+    onUpdateGuestLobbyProfile: (String, String, String, TeamEmblem, Long, Long, Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
+    onSendMultiplayerChat: (String) -> Unit = {},
+    onMarkMultiplayerChatRead: () -> Unit = {},
+    onLaunchMultiplayerDraft: () -> Unit = {},
+    onLeaveMultiplayerRoom: () -> Unit = {}
 ) {
     var forceSetupView by remember { mutableStateOf(false) }
+    var isMultiplayerTabSelected by remember {
+        mutableStateOf(mpState.isMultiplayerActive || mpState.pendingDeepLinkCode.isNotBlank())
+    }
+    var showChatDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mpState.pendingDeepLinkCode, mpState.role, mpState.phase) {
+        if (mpState.pendingDeepLinkCode.isNotBlank() ||
+            (mpState.isMultiplayerActive && mpState.phase == MultiplayerRoomPhase.LOBBY)
+        ) {
+            isMultiplayerTabSelected = true
+            forceSetupView = true
+        } else if (mpState.isMultiplayerActive && mpState.phase == MultiplayerRoomPhase.DRAFT_IN_PROGRESS) {
+            forceSetupView = false
+        }
+    }
+
+    val isInMultiplayerLobby = mpState.isMultiplayerActive && mpState.phase == MultiplayerRoomPhase.LOBBY
+    val showSetupOrLobby = draftSession == null ||
+        draftSession.status == "NOT_STARTED" ||
+        forceSetupView ||
+        isInMultiplayerLobby
 
     when {
-        draftSession == null || draftSession.status == "NOT_STARTED" || forceSetupView -> {
-            DraftSetupConfigurator(
-                initialConfig = draftConfig,
-                hasExistingSession = draftSession != null,
-                onCancelReconfigure = { forceSetupView = false },
-                onLaunchDraft = { cfg ->
-                    forceSetupView = false
-                    onStartDraft(cfg)
+        showSetupOrLobby -> {
+            Column(modifier = Modifier.fillMaxSize()) {
+                DraftModeSelectorBanner(
+                    isMultiplayerTabSelected = isMultiplayerTabSelected,
+                    mpState = mpState,
+                    onSelectMultiplayerTab = { selectedMp ->
+                        isMultiplayerTabSelected = selectedMp
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+
+                if (isMultiplayerTabSelected) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        MultiplayerSetupAndLobbyView(
+                            mpState = mpState,
+                            humanTeam = humanTeam,
+                            initialDraftConfig = draftConfig,
+                            onHostRoom = onHostMultiplayerRoom,
+                            onJoinRoom = onJoinMultiplayerRoom,
+                            onBuildShareText = onBuildMultiplayerShareText,
+                            onAddLocalFriend = onAddLocalPassAndPlayFriend,
+                            onRemoveParticipant = onRemoveLobbyParticipant,
+                            onMoveParticipant = onMoveLobbyParticipant,
+                            onRandomizeOrder = onRandomizeLobbyOrder,
+                            onUpdateHostRules = onUpdateHostLobbyRules,
+                            onUpdateGuestProfileAndReady = onUpdateGuestLobbyProfile,
+                            onSendChat = onSendMultiplayerChat,
+                            onLaunchMultiplayerDraft = {
+                                forceSetupView = false
+                                onLaunchMultiplayerDraft()
+                            },
+                            onLeaveRoom = onLeaveMultiplayerRoom
+                        )
+                    }
+                } else {
+                    Box(modifier = Modifier.weight(1f)) {
+                        DraftSetupConfigurator(
+                            initialConfig = draftConfig,
+                            hasExistingSession = draftSession != null && draftSession.status != "NOT_STARTED" && !isInMultiplayerLobby,
+                            onCancelReconfigure = { forceSetupView = false },
+                            onLaunchDraft = { cfg ->
+                                forceSetupView = false
+                                onStartDraft(cfg)
+                            }
+                        )
+                    }
                 }
-            )
+            }
         }
         draftSession.status == "IN_PROGRESS" -> {
             ActiveDraftRoomView(
@@ -72,13 +151,26 @@ fun DraftScreen(
                 picks = draftPicks,
                 fantasyTeams = fantasyTeams,
                 humanTeam = humanTeam,
+                controlledTeamId = controlledTeamId,
+                mpState = mpState,
                 allScoredPlayers = allScoredPlayers,
                 timerSecondsLeft = timerRemainingSeconds,
                 onPickPlayer = onMakeHumanPick,
                 onAutoPick = onAutoPickHuman,
                 onUndo = onUndoLastPick,
                 onSimToEnd = onSimRestOfDraft,
-                onReconfigure = { forceSetupView = true },
+                onReconfigure = {
+                    isMultiplayerTabSelected = mpState.isMultiplayerActive
+                    forceSetupView = true
+                },
+                onOpenMultiplayerInvite = {
+                    isMultiplayerTabSelected = true
+                    forceSetupView = true
+                },
+                onOpenChat = {
+                    onMarkMultiplayerChatRead()
+                    showChatDialog = true
+                },
                 onPlayerClick = onPlayerClick
             )
         }
@@ -86,12 +178,37 @@ fun DraftScreen(
             DraftCompletedSummaryView(
                 picks = draftPicks,
                 fantasyTeams = fantasyTeams,
-                canUndo = draftPicks.any { it.isHumanPick },
+                controlledTeamId = controlledTeamId,
+                mpState = mpState,
+                canUndo = mpState.role != RoomRole.GUEST && draftPicks.any { it.isHumanPick },
                 onUndoLastPick = onUndoLastPick,
-                onStartNewDraft = { forceSetupView = true },
+                onStartNewDraft = {
+                    isMultiplayerTabSelected = mpState.isMultiplayerActive
+                    forceSetupView = true
+                },
+                onInviteFriendsDraft = {
+                    isMultiplayerTabSelected = true
+                    forceSetupView = true
+                },
+                onOpenChat = {
+                    onMarkMultiplayerChatRead()
+                    showChatDialog = true
+                },
                 onManageRoster = onGoToMyTeam
             )
         }
+    }
+
+    if (showChatDialog && mpState.isMultiplayerActive) {
+        MultiplayerChatSheetDialog(
+            mpState = mpState,
+            onBuildShareText = onBuildMultiplayerShareText,
+            onSendChat = onSendMultiplayerChat,
+            onDismiss = {
+                onMarkMultiplayerChatRead()
+                showChatDialog = false
+            }
+        )
     }
 }
 
@@ -276,7 +393,7 @@ private fun DraftSetupConfigurator(
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Start Fantasy Draft (${previewConfig.teamCount} Teams)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+            Text("Start Solo Fantasy Draft (${previewConfig.teamCount} Teams)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -326,6 +443,8 @@ private fun ActiveDraftRoomView(
     picks: List<DraftPickEntity>,
     fantasyTeams: List<FantasyTeamEntity>,
     humanTeam: FantasyTeamEntity?,
+    controlledTeamId: String,
+    mpState: MultiplayerUiState,
     allScoredPlayers: List<ScoredPlayerItem>,
     timerSecondsLeft: Int,
     onPickPlayer: (Long) -> Unit,
@@ -333,6 +452,8 @@ private fun ActiveDraftRoomView(
     onUndo: () -> Unit,
     onSimToEnd: () -> Unit,
     onReconfigure: () -> Unit,
+    onOpenMultiplayerInvite: () -> Unit,
+    onOpenChat: () -> Unit,
     onPlayerClick: (Long) -> Unit
 ) {
     var activeSubTab by remember { mutableIntStateOf(0) } // 0=Available, 1=Draft Log, 2=My Picks
@@ -342,20 +463,27 @@ private fun ActiveDraftRoomView(
     val teamOrder = session.teamOrderCsv.split(",").filter { it.isNotBlank() }
     val (round, pickInRound, onClockTeamId) = if (teamOrder.isNotEmpty()) {
         DraftEngine.getPickMetadata(session.currentOverallPick, teamOrder, config.isSnakeDraft)
-    } else Triple(1, 1, NhlFantasyRepository.USER_TEAM_ID)
+    } else Triple(1, 1, controlledTeamId)
 
     val onClockTeam = fantasyTeams.firstOrNull { it.teamId == onClockTeamId }
-    val isUserTurn = onClockTeamId == NhlFantasyRepository.USER_TEAM_ID
+    val isMyControlledTurn = onClockTeamId == controlledTeamId
+    val isLocalPassAndPlayTurn = mpState.role != RoomRole.GUEST && onClockTeam?.isLocalPassAndPlayGm == true
+    val canActOnClock = isMyControlledTurn || isLocalPassAndPlayTurn
+    val isRemoteFriendTurn = !canActOnClock && onClockTeam != null && !onClockTeam.isCpuGm
 
-    val userRoster = allScoredPlayers.filter { it.player.ownerFantasyTeamId == NhlFantasyRepository.USER_TEAM_ID }
-    val userPayroll = userRoster.sumOf { it.player.capHitCad }
+    val actingTeamId = if (isLocalPassAndPlayTurn) onClockTeamId else controlledTeamId
+    val actingTeam = fantasyTeams.firstOrNull { it.teamId == actingTeamId } ?: humanTeam
+
+    val myControlledRoster = allScoredPlayers.filter { it.player.ownerFantasyTeamId == controlledTeamId }
+    val actingRoster = allScoredPlayers.filter { it.player.ownerFantasyTeamId == actingTeamId }
+    val actingPayroll = actingRoster.sumOf { it.player.capHitCad }
 
     val neededText = buildList {
-        val cLeft = config.requiredCenters - userRoster.count { it.player.position == Position.CENTER }
-        val lwLeft = config.requiredLeftWings - userRoster.count { it.player.position == Position.LEFT_WING }
-        val rwLeft = config.requiredRightWings - userRoster.count { it.player.position == Position.RIGHT_WING }
-        val dLeft = config.requiredDefensemen - userRoster.count { it.player.position == Position.DEFENSE }
-        val gLeft = config.requiredGoalies - userRoster.count { it.player.position == Position.GOALIE }
+        val cLeft = config.requiredCenters - actingRoster.count { it.player.position == Position.CENTER }
+        val lwLeft = config.requiredLeftWings - actingRoster.count { it.player.position == Position.LEFT_WING }
+        val rwLeft = config.requiredRightWings - actingRoster.count { it.player.position == Position.RIGHT_WING }
+        val dLeft = config.requiredDefensemen - actingRoster.count { it.player.position == Position.DEFENSE }
+        val gLeft = config.requiredGoalies - actingRoster.count { it.player.position == Position.GOALIE }
         if (cLeft > 0) add("${cLeft}C")
         if (lwLeft > 0) add("${lwLeft}LW")
         if (rwLeft > 0) add("${rwLeft}RW")
@@ -384,6 +512,23 @@ private fun ActiveDraftRoomView(
             .sortedByDescending { it.player.overallRating }
     }
 
+    val bannerTone = when {
+        isMyControlledTurn -> ProfitEmerald
+        isLocalPassAndPlayTurn -> TrophyGold
+        isRemoteFriendTurn -> IceCyan
+        else -> RoyalBlue
+    }
+
+    val turnHeadline = when {
+        isMyControlledTurn -> "YOU ARE ON THE CLOCK! (${humanTeam?.teamName ?: "Your Team"})"
+        isLocalPassAndPlayTurn -> "PASS PHONE TO ${onClockTeam?.gmDisplayName?.ifBlank { onClockTeam.teamName }} (${onClockTeam?.teamName})!"
+        isRemoteFriendTurn -> {
+            val gmTag = onClockTeam?.gmDisplayName?.takeIf { it.isNotBlank() }?.let { " (GM $it)" }.orEmpty()
+            "WAITING ON FRIEND: ${onClockTeam?.teamName ?: onClockTeamId}$gmTag..."
+        }
+        else -> "CPU GM Picking: ${onClockTeam?.teamName ?: onClockTeamId}..."
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -394,7 +539,7 @@ private fun ActiveDraftRoomView(
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.5.dp, if (isUserTurn) ProfitEmerald else IceCyan)
+            border = BorderStroke(1.5.dp, bannerTone)
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
@@ -402,29 +547,32 @@ private fun ActiveDraftRoomView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
+                        val mpPrefix = if (mpState.isMultiplayerActive) {
+                            "LIVE ROOM ${RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)} • "
+                        } else ""
                         Text(
-                            text = "ROUND $round OF ${config.totalRounds} • PICK #${session.currentOverallPick} (Rd Pick $pickInRound)",
+                            text = "${mpPrefix}ROUND $round OF ${config.totalRounds} • PICK #${session.currentOverallPick} (Rd Pick $pickInRound)",
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isUserTurn) ProfitEmerald else IceCyan,
+                            color = bannerTone,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = if (isUserTurn) "YOU ARE ON THE CLOCK!" else "CPU Picking: ${onClockTeam?.teamName ?: onClockTeamId}...",
+                            text = turnHeadline,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
-                    if (config.pickTimerSeconds > 0 && isUserTurn) {
+                    if (config.pickTimerSeconds > 0 && timerSecondsLeft > 0) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (timerSecondsLeft <= 10) AlertRed.copy(alpha = 0.2f) else IceCyan.copy(alpha = 0.2f)
+                            color = if (timerSecondsLeft <= 10) AlertRed.copy(alpha = 0.2f) else bannerTone.copy(alpha = 0.2f)
                         ) {
                             Text(
                                 text = "${timerSecondsLeft}s",
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = if (timerSecondsLeft <= 10) AlertRed else IceCyan,
+                                color = if (timerSecondsLeft <= 10) AlertRed else bannerTone,
                                 fontWeight = FontWeight.ExtraBold
                             )
                         }
@@ -432,13 +580,13 @@ private fun ActiveDraftRoomView(
                 }
 
                 Text(
-                    text = "Mandatory Needs: $neededText • Cash: ${CadFormatter.formatCompact(humanTeam?.cashBalanceCad ?: 0L)}" +
-                        (if (config.enforceSalaryCap) " • Cap Left: ${CadFormatter.formatCompact(config.salaryCapCad - userPayroll)}" else ""),
+                    text = "${actingTeam?.abbreviation ?: "GM"} Needs: $neededText • Cash: ${CadFormatter.formatCompact(actingTeam?.cashBalanceCad ?: 0L)}" +
+                        (if (config.enforceSalaryCap) " • Cap Left: ${CadFormatter.formatCompact(config.salaryCapCad - actingPayroll)}" else ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Draft Controls Row (Undo, Auto-Pick, Sim Draft, New Setup)
+                // Draft Controls Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -447,25 +595,44 @@ private fun ActiveDraftRoomView(
                 ) {
                     FilledTonalButton(
                         onClick = onAutoPick,
-                        enabled = isUserTurn
+                        enabled = canActOnClock
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Auto-Pick")
                     }
-                    OutlinedButton(
-                        onClick = onUndo,
-                        enabled = picks.any { it.isHumanPick }
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Undo")
+
+                    if (mpState.isMultiplayerActive) {
+                        OutlinedButton(onClick = onOpenChat) {
+                            Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            val unread = if (mpState.unreadChatCount > 0) " (${mpState.unreadChatCount})" else ""
+                            Text("Chat$unread")
+                        }
+                    } else {
+                        OutlinedButton(onClick = onOpenMultiplayerInvite) {
+                            Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Invite Friends")
+                        }
                     }
-                    OutlinedButton(onClick = onSimToEnd) {
-                        Text("Sim Rest")
+
+                    if (mpState.role != RoomRole.GUEST) {
+                        OutlinedButton(
+                            onClick = onUndo,
+                            enabled = picks.any { it.isHumanPick }
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Undo")
+                        }
+                        OutlinedButton(onClick = onSimToEnd) {
+                            Text("Sim Rest")
+                        }
                     }
+
                     TextButton(onClick = onReconfigure) {
-                        Text("New Draft")
+                        Text(if (mpState.isMultiplayerActive) "Lobby" else "New Draft")
                     }
                 }
             }
@@ -475,7 +642,7 @@ private fun ActiveDraftRoomView(
         TabRow(selectedTabIndex = activeSubTab) {
             Tab(selected = activeSubTab == 0, onClick = { activeSubTab = 0 }, text = { Text("Players (${availablePool.size})") })
             Tab(selected = activeSubTab == 1, onClick = { activeSubTab = 1 }, text = { Text("History (${picks.size})") })
-            Tab(selected = activeSubTab == 2, onClick = { activeSubTab = 2 }, text = { Text("My Picks (${userRoster.size})") })
+            Tab(selected = activeSubTab == 2, onClick = { activeSubTab = 2 }, text = { Text("My Picks (${myControlledRoster.size})") })
         }
 
         when (activeSubTab) {
@@ -538,7 +705,7 @@ private fun ActiveDraftRoomView(
                                 OvrBadge(p.overallRating)
                                 Button(
                                     onClick = { onPickPlayer(p.playerId) },
-                                    enabled = isUserTurn,
+                                    enabled = canActOnClock,
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                 ) {
                                     Text("Draft", fontWeight = FontWeight.Bold)
@@ -554,13 +721,16 @@ private fun ActiveDraftRoomView(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(picks.reversed(), key = { it.overallPick }) { pick ->
+                        val isMyPick = pick.fantasyTeamId == controlledTeamId
+                        val borderColor = when {
+                            isMyPick -> ProfitEmerald.copy(alpha = 0.65f)
+                            pick.isHumanPick -> IceCyan.copy(alpha = 0.55f)
+                            else -> MaterialTheme.colorScheme.outline
+                        }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(
-                                1.dp,
-                                if (pick.isHumanPick) ProfitEmerald.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outline
-                            )
+                            border = BorderStroke(1.dp, borderColor)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -573,7 +743,7 @@ private fun ActiveDraftRoomView(
                                 Text(
                                     text = "#${pick.overallPick}\nR${pick.roundNumber}",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = if (pick.isHumanPick) ProfitEmerald else IceCyan,
+                                    color = if (isMyPick) ProfitEmerald else IceCyan,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
@@ -599,7 +769,7 @@ private fun ActiveDraftRoomView(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(userRoster.sortedByDescending { it.player.overallRating }, key = { it.player.playerId }) { item ->
+                    items(myControlledRoster.sortedByDescending { it.player.overallRating }, key = { it.player.playerId }) { item ->
                         val p = item.player
                         Surface(
                             modifier = Modifier
@@ -633,9 +803,13 @@ private fun ActiveDraftRoomView(
 private fun DraftCompletedSummaryView(
     picks: List<DraftPickEntity>,
     fantasyTeams: List<FantasyTeamEntity>,
+    controlledTeamId: String,
+    mpState: MultiplayerUiState,
     canUndo: Boolean,
     onUndoLastPick: () -> Unit,
     onStartNewDraft: () -> Unit,
+    onInviteFriendsDraft: () -> Unit,
+    onOpenChat: () -> Unit,
     onManageRoster: () -> Unit
 ) {
     val reports = remember(fantasyTeams, picks) {
@@ -648,36 +822,70 @@ private fun DraftCompletedSummaryView(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            val subtitle = if (mpState.isMultiplayerActive) {
+                "Room ${RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)} • ${picks.size} picks synced across all GMs!"
+            } else {
+                "${picks.size} total picks completed • Rosters synced to My Team & Season Matchups"
+            }
             Text("Fantasy Draft Summary & Grades", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-            Text("${picks.size} total picks completed • Rosters synced to My Team & Season Matchups", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(onClick = onManageRoster, modifier = Modifier.weight(1f)) {
+                Button(onClick = onManageRoster) {
                     Text("Manage My Lineup", fontWeight = FontWeight.Bold)
+                }
+                if (mpState.isMultiplayerActive) {
+                    OutlinedButton(onClick = onOpenChat) {
+                        val unread = if (mpState.unreadChatCount > 0) " (${mpState.unreadChatCount})" else ""
+                        Text("Room Chat$unread")
+                    }
+                } else {
+                    OutlinedButton(onClick = onInviteFriendsDraft) {
+                        Text("Multiplayer Draft")
+                    }
                 }
                 if (canUndo) {
                     OutlinedButton(onClick = onUndoLastPick) {
                         Text("Undo Pick")
                     }
                 }
-                OutlinedButton(onClick = onStartNewDraft) {
-                    Text("New Draft")
+                if (mpState.role != RoomRole.GUEST) {
+                    OutlinedButton(onClick = onStartNewDraft) {
+                        Text("New Draft")
+                    }
                 }
             }
         }
 
         items(reports, key = { it.teamId }) { rep ->
+            val isMe = rep.teamId == controlledTeamId
+            val isFriendHuman = !isMe && rep.isHuman && rep.ownerType != "CPU_GM"
+            val ownerTag = when {
+                isMe -> " (Your Team)"
+                rep.ownerType == "REMOTE_HUMAN_GM" -> " (Online Friend${if (rep.gmDisplayName.isNotBlank()) ": GM ${rep.gmDisplayName}" else ""})"
+                rep.ownerType == "LOCAL_HUMAN_GM" -> " (Local Friend${if (rep.gmDisplayName.isNotBlank()) ": GM ${rep.gmDisplayName}" else ""})"
+                isFriendHuman -> " (Friend${if (rep.gmDisplayName.isNotBlank()) ": GM ${rep.gmDisplayName}" else ""})"
+                else -> " (CPU GM)"
+            }
+            val highlightTone = when {
+                isMe -> ProfitEmerald
+                isFriendHuman -> IceCyan
+                else -> MaterialTheme.colorScheme.outline
+            }
+
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(
-                    width = if (rep.isHuman) 1.6.dp else 1.dp,
-                    color = if (rep.isHuman) ProfitEmerald else MaterialTheme.colorScheme.outline
+                    width = if (isMe || isFriendHuman) 1.6.dp else 1.dp,
+                    color = highlightTone
                 )
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -686,12 +894,12 @@ private fun DraftCompletedSummaryView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${rep.teamName}${if (rep.isHuman) " (Your Team)" else ""}",
+                                text = "${rep.teamName}$ownerTag",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (rep.isHuman) ProfitEmerald else MaterialTheme.colorScheme.onSurface
+                                color = if (isMe) ProfitEmerald else if (isFriendHuman) IceCyan else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "${rep.picksCount} Picks • Avg ${rep.averageOvr} OVR • Payroll ${CadFormatter.formatCompact(rep.totalPayrollCad)}",

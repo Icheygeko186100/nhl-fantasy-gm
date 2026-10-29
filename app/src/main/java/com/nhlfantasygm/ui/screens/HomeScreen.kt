@@ -28,6 +28,9 @@ import com.nhlfantasygm.domain.TeamRosterAnalytics
 import com.nhlfantasygm.model.CadFormatter
 import com.nhlfantasygm.model.DataFreshnessState
 import com.nhlfantasygm.model.TeamEmblem
+import com.nhlfantasygm.multiplayer.MultiplayerUiState
+import com.nhlfantasygm.multiplayer.RoomCrypto
+import com.nhlfantasygm.multiplayer.RoomRole
 import com.nhlfantasygm.ui.LeagueSectionTab
 import com.nhlfantasygm.ui.ScoredPlayerItem
 import com.nhlfantasygm.ui.components.*
@@ -47,6 +50,7 @@ fun HomeScreen(
     fantasyTeams: List<FantasyTeamEntity>,
     matchups: List<FantasyMatchupEntity>,
     newsHeadlines: List<NewsHeadlineEntity>,
+    mpState: MultiplayerUiState = MultiplayerUiState(),
     onRefreshData: () -> Unit,
     onPlayerClick: (Long) -> Unit,
     onNavigateMainTab: (Int) -> Unit,
@@ -88,6 +92,46 @@ fun HomeScreen(
             )
         }
 
+        // 1b. Active Multiplayer Room Banner (if hosting or joined)
+        if (mpState.isMultiplayerActive) {
+            item {
+                val formattedCode = RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateMainTab(1) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.2.dp, ProfitEmerald)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "MULTIPLAYER ROOM $formattedCode • ${mpState.connectionState.badgeLabel.uppercase()}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ProfitEmerald,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = "${if (mpState.role == RoomRole.HOST) "Host Commissioner" else "Joined Friend"} • ${mpState.totalHumanParticipantsCount} Real Human GMs",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        FilledTonalButton(onClick = { onNavigateMainTab(1) }) {
+                            Text("Draft Room")
+                        }
+                    }
+                }
+            }
+        }
+
         // 2. Data Freshness & Manual Sync Banner
         item {
             DataFreshnessBanner(
@@ -100,7 +144,7 @@ fun HomeScreen(
             )
         }
 
-        // 3. Quick Navigation Pills (Draft, Marketplace, My Team, Trades, Statistics, Settings)
+        // 3. Quick Navigation Pills (Draft, Multiplayer, Marketplace, My Team, Trades, Statistics, Settings)
         item {
             Row(
                 modifier = Modifier
@@ -109,6 +153,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 QuickNavButton("Draft", Icons.Default.HowToVote) { onNavigateMainTab(1) }
+                QuickNavButton("Invite Friends", Icons.Default.GroupAdd) { onNavigateMainTab(1) }
                 QuickNavButton("Marketplace", Icons.Default.Storefront) { onNavigateMainTab(2) }
                 QuickNavButton("My Team", Icons.Default.Groups) { onNavigateMainTab(3) }
                 QuickNavButton("Trades", Icons.Default.SwapHoriz) {
@@ -221,16 +266,26 @@ fun HomeScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
 
                     rankedStandings.forEachIndexed { idx, t ->
+                        val isMe = t.teamId == humanTeam?.teamId
+                        val isFriend = !isMe && !t.isCpuGm
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "#${idx + 1} ${t.teamName}${if (t.isHuman) " (You)" else ""}",
+                                text = "#${idx + 1} ${t.teamName}" + when {
+                                    isMe -> " (You)"
+                                    isFriend -> " (Friend)"
+                                    else -> ""
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (t.isHuman) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (t.isHuman) IceCyan else MaterialTheme.colorScheme.onSurface
+                                fontWeight = if (isMe || isFriend) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = when {
+                                    isMe -> ProfitEmerald
+                                    isFriend -> IceCyan
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
                             )
                             Text(
                                 text = "${t.wins}-${t.losses}-${t.ties} • ${String.format("%.1f", t.pointsFor)} PF",

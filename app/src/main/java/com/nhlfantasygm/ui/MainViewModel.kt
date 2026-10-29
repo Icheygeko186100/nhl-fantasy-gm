@@ -7,6 +7,7 @@ import com.nhlfantasygm.data.local.*
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
 import com.nhlfantasygm.domain.*
 import com.nhlfantasygm.model.*
+import com.nhlfantasygm.multiplayer.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -94,7 +95,8 @@ data class PlayerDetailDialogState(
 )
 
 class MainViewModel(
-    val repository: NhlFantasyRepository
+    val repository: NhlFantasyRepository,
+    val multiplayerCoordinator: MultiplayerCoordinator = MultiplayerCoordinator(repository)
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
@@ -102,8 +104,11 @@ class MainViewModel(
 
     private val _hasSyncedLiveThisSession = MutableStateFlow(false)
 
-    private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarEvents: SharedFlow<String> = _snackbarEvents.asSharedFlow()
+
+    private val _navigationRequests = MutableSharedFlow<Int>(extraBufferCapacity = 2)
+    val navigationRequests: SharedFlow<Int> = _navigationRequests.asSharedFlow()
 
     private val _marketFilter = MutableStateFlow(MarketplaceFilterState())
     val marketFilter: StateFlow<MarketplaceFilterState> = _marketFilter.asStateFlow()
@@ -121,6 +126,11 @@ class MainViewModel(
     val draftTimerRemainingSec: StateFlow<Int> = _draftTimerRemainingSec.asStateFlow()
     private var draftTimerJob: Job? = null
 
+    val multiplayerState: StateFlow<MultiplayerUiState> = multiplayerCoordinator.uiState
+
+    val controlledTeamIdState: StateFlow<String> = repository.controlledTeamIdFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NhlFantasyRepository.USER_TEAM_ID)
+
     val settingsState: StateFlow<UserAppSettings> = repository.settingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserAppSettings())
 
@@ -133,8 +143,12 @@ class MainViewModel(
     val humanTeamState: StateFlow<FantasyTeamEntity?> = repository.humanTeamFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val transactionsState: StateFlow<List<TransactionEntity>> = repository.transactionsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val transactionsState: StateFlow<List<TransactionEntity>> = combine(
+        repository.transactionsFlow,
+        controlledTeamIdState
+    ) { txs, controlledId ->
+        txs.filter { it.teamId == controlledId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val draftSessionState: StateFlow<DraftSessionEntity?> = repository.draftSessionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -264,8 +278,12 @@ class MainViewModel(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val userRosterScoredState: StateFlow<List<ScoredPlayerItem>> = allScoredPlayersState
-        .map { list -> list.filter { it.player.ownerFantasyTeamId == NhlFantasyRepository.USER_TEAM_ID } }
+    val userRosterScoredState: StateFlow<List<ScoredPlayerItem>> = combine(
+        allScoredPlayersState,
+        controlledTeamIdState
+    ) { list, controlledId ->
+        list.filter { it.player.ownerFantasyTeamId == controlledId }
+    }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -300,7 +318,19 @@ class MainViewModel(
             repository.ensureFranchiseInitialized()
             triggerFullSync(silentIfCached = true)
         }
+        viewModelScope.launch {
+            multiplayerCoordinator.events.collect { msg ->
+                _snackbarEvents.tryEmit(msg)
+            }
+        }
         observeDraftSessionForTimerAndCpu()
+    }
+
+    fun handleIncomingInviteDeepLink(rawUri: String) {
+        val code = multiplayerCoordinator.handleIncomingInviteLink(rawUri)
+        if (code != null) {
+            _navigationRequests.tryEmit(1) // Navigate straight to Draft tab
+        }
     }
 
     fun triggerFullSync(silentIfCached: Boolean = false) {
@@ -459,7 +489,7 @@ class MainViewModel(
 
     private fun executeConfirmedBuy(playerId: Long) {
         viewModelScope.launch {
-            val res = repository.buyPlayerFromMarketplace(playerId)
+            val res = multiplayerCoordinator.submitMultiplayerMarketBuy(playerId)
             res.onSuccess { msg ->
                 _snackbarEvents.tryEmit(msg)
                 refreshOpenPlayerDetailSnapshot(playerId)
@@ -471,7 +501,7 @@ class MainViewModel(
 
     private fun executeConfirmedSell(playerId: Long) {
         viewModelScope.launch {
-            val res = repository.sellPlayerToMarketplace(playerId)
+            val res = multiplayerCoordinator.submitMultiplayerMarketSell(playerId)
             res.onSuccess { msg ->
                 _snackbarEvents.tryEmit(msg)
                 refreshOpenPlayerDetailSnapshot(playerId)
@@ -495,11 +525,25 @@ class MainViewModel(
         }
     }
 
-    // --- Draft Mode ---
+    // --- Draft Mode (Solo + Real-Time Multiplayer) ---
 
     private fun observeDraftSessionForTimerAndCpu() {
         viewModelScope.launch {
-            draftSessionState.collectLatest { session ->
+            combine(
+                draftSessionState,
+                fantasyTeamsState,
+                multiplayerState,
+                controlledTeamIdState
+            ) { session, teams, mpState, controlledId ->
+                DraftWatchTuple(session, teams, mpState.role, controlledId)
+            }.distinctUntilChanged { a, b ->
+                a.session?.status == b.session?.status &&
+                    a.session?.currentOverallPick == b.session?.currentOverallPick &&
+                    a.session?.startedAtEpochMs == b.session?.startedAtEpochMs &&
+                    a.role == b.role &&
+                    a.controlledId == b.controlledId &&
+                    a.teams.size == b.teams.size
+            }.collectLatest { (session, teams, role, controlledId) ->
                 draftTimerJob?.cancel()
                 if (session == null || session.status != "IN_PROGRESS") {
                     _draftTimerRemainingSec.value = 0
@@ -509,39 +553,114 @@ class MainViewModel(
                 val teamOrder = session.teamOrderCsv.split(",").filter { it.isNotBlank() }
                 if (teamOrder.isEmpty()) return@collectLatest
 
-                val (_, _, activeTeamId) = DraftEngine.getPickMetadata(
+                val (_, _, onClockTeamId) = DraftEngine.getPickMetadata(
                     session.currentOverallPick,
                     teamOrder,
                     config.isSnakeDraft
                 )
+                val onClockTeam = teams.firstOrNull { it.teamId == onClockTeamId }
 
-                if (activeTeamId != NhlFantasyRepository.USER_TEAM_ID) {
-                    _draftTimerRemainingSec.value = 0
-                    delay(180)
-                    repository.advanceCpuDraftPicks(maxSteps = 20)
-                } else if (config.pickTimerSeconds > 0) {
-                    draftTimerJob = launch {
-                        var left = config.pickTimerSeconds
-                        _draftTimerRemainingSec.value = left
-                        while (left > 0) {
-                            delay(1000L)
-                            left--
+                if (role == RoomRole.GUEST) {
+                    // Guest never advances CPU locally; Host is authoritative.
+                    val isMyGuestTurn = onClockTeamId == controlledId
+                    if (config.pickTimerSeconds > 0 && (isMyGuestTurn || onClockTeam?.isCpuGm == false)) {
+                        draftTimerJob = launch {
+                            var left = config.pickTimerSeconds
                             _draftTimerRemainingSec.value = left
+                            while (left > 0) {
+                                delay(1000L)
+                                left--
+                                _draftTimerRemainingSec.value = left
+                            }
+                            if (isMyGuestTurn) {
+                                multiplayerCoordinator.submitMultiplayerAutoPick()
+                                    .onSuccess { _snackbarEvents.tryEmit("Timer expired — Auto-Draft submitted") }
+                            }
                         }
-                        val autoRes = repository.autoPickForHuman()
-                        autoRes.onSuccess { msg ->
-                            _snackbarEvents.tryEmit("Timer expired — Auto-Draft: $msg")
+                    } else {
+                        _draftTimerRemainingSec.value = 0
+                    }
+                    return@collectLatest
+                }
+
+                // Solo or Host mode:
+                val isCpuTurn = onClockTeam == null || onClockTeam.isCpuGm
+                val isLocalHumanTurn = onClockTeamId == controlledId || (onClockTeam?.isLocalPassAndPlayGm == true)
+
+                when {
+                    isCpuTurn -> {
+                        _draftTimerRemainingSec.value = 0
+                        delay(180)
+                        val count = repository.advanceCpuDraftPicks(maxSteps = 20).getOrDefault(0)
+                        if (count > 0 && role == RoomRole.HOST) {
+                            multiplayerCoordinator.broadcastAuthoritativeSnapshot()
                         }
                     }
-                } else {
-                    _draftTimerRemainingSec.value = 0
+                    isLocalHumanTurn -> {
+                        if (config.pickTimerSeconds > 0) {
+                            draftTimerJob = launch {
+                                var left = config.pickTimerSeconds
+                                _draftTimerRemainingSec.value = left
+                                while (left > 0) {
+                                    delay(1000L)
+                                    left--
+                                    _draftTimerRemainingSec.value = left
+                                }
+                                val autoRes = multiplayerCoordinator.submitMultiplayerAutoPick()
+                                autoRes.onSuccess { msg ->
+                                    _snackbarEvents.tryEmit("Timer expired — Auto-Draft: $msg")
+                                }
+                            }
+                        } else {
+                            _draftTimerRemainingSec.value = 0
+                        }
+                    }
+                    else -> {
+                        // An invited online friend (`REMOTE_HUMAN_GM`) is on the clock!
+                        if (config.pickTimerSeconds > 0) {
+                            draftTimerJob = launch {
+                                var left = config.pickTimerSeconds
+                                _draftTimerRemainingSec.value = left
+                                while (left > 0) {
+                                    delay(1000L)
+                                    left--
+                                    _draftTimerRemainingSec.value = left
+                                }
+                                // 3-second network grace period before Host enforces clock auto-pick
+                                delay(3000L)
+                                val latestSession = draftSessionState.value
+                                if (latestSession?.currentOverallPick == session.currentOverallPick &&
+                                    latestSession.status == "IN_PROGRESS"
+                                ) {
+                                    val r = repository.autoPickForHuman(actingTeamId = onClockTeamId)
+                                    if (r.isSuccess) {
+                                        repository.advanceCpuDraftPicks(maxSteps = 20)
+                                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                                        _snackbarEvents.tryEmit("Clock expired for ${onClockTeam.teamName}: ${r.getOrNull()}")
+                                    }
+                                }
+                            }
+                        } else {
+                            _draftTimerRemainingSec.value = 0
+                        }
+                    }
                 }
             }
         }
     }
 
+    private data class DraftWatchTuple(
+        val session: DraftSessionEntity?,
+        val teams: List<FantasyTeamEntity>,
+        val role: RoomRole,
+        val controlledId: String
+    )
+
     fun startDraft(config: DraftConfig) {
         viewModelScope.launch {
+            if (multiplayerState.value.isMultiplayerActive) {
+                multiplayerCoordinator.leaveMultiplayerRoom()
+            }
             repository.startNewDraft(config)
                 .onSuccess {
                     _snackbarEvents.tryEmit("Draft Room live! ${config.teamCount} teams • ${config.totalRounds} rounds.")
@@ -554,7 +673,7 @@ class MainViewModel(
 
     fun draftPlayerForHuman(playerId: Long) {
         viewModelScope.launch {
-            repository.makeHumanDraftPick(playerId)
+            multiplayerCoordinator.submitMultiplayerDraftPick(playerId)
                 .onSuccess { msg -> _snackbarEvents.tryEmit(msg) }
                 .onFailure { err -> _snackbarEvents.tryEmit(err.message ?: "Invalid draft pick") }
         }
@@ -562,7 +681,7 @@ class MainViewModel(
 
     fun autoPickHumanTurn() {
         viewModelScope.launch {
-            repository.autoPickForHuman()
+            multiplayerCoordinator.submitMultiplayerAutoPick()
                 .onSuccess { msg -> _snackbarEvents.tryEmit(msg) }
                 .onFailure { err -> _snackbarEvents.tryEmit(err.message ?: "Auto-pick failed") }
         }
@@ -570,32 +689,175 @@ class MainViewModel(
 
     fun undoLastDraftPick() {
         viewModelScope.launch {
+            if (multiplayerState.value.role == RoomRole.GUEST) {
+                _snackbarEvents.tryEmit("Undo is only available in local single-player drafts.")
+                return@launch
+            }
             repository.undoLastHumanDraftPick()
-                .onSuccess { msg -> _snackbarEvents.tryEmit(msg) }
+                .onSuccess { msg ->
+                    if (multiplayerState.value.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
+                    _snackbarEvents.tryEmit(msg)
+                }
                 .onFailure { err -> _snackbarEvents.tryEmit(err.message ?: "Nothing to undo") }
         }
     }
 
     fun simRemainingDraftToCompletion() {
         viewModelScope.launch {
+            if (multiplayerState.value.role == RoomRole.GUEST) {
+                _snackbarEvents.tryEmit("Only the Host Commissioner can fast-simulate the draft.")
+                return@launch
+            }
             var safety = 0
             while (safety < 350) {
                 val session = draftSessionState.value
                 if (session == null || session.status != "IN_PROGRESS") break
                 val config = repository.decodeDraftConfig(session)
                 val order = session.teamOrderCsv.split(",").filter { it.isNotBlank() }
-                val (_, _, activeTeam) = DraftEngine.getPickMetadata(session.currentOverallPick, order, config.isSnakeDraft)
-                if (activeTeam == NhlFantasyRepository.USER_TEAM_ID) {
-                    val r = repository.autoPickForHuman()
+                val (_, _, activeTeamId) = DraftEngine.getPickMetadata(session.currentOverallPick, order, config.isSnakeDraft)
+                val activeTeam = fantasyTeamsState.value.firstOrNull { it.teamId == activeTeamId }
+                if (activeTeam != null && !activeTeam.isCpuGm) {
+                    val r = repository.autoPickForHuman(actingTeamId = activeTeamId)
                     if (r.isFailure) break
                 } else {
                     val r = repository.advanceCpuDraftPicks(maxSteps = 16)
                     if (r.getOrDefault(0) == 0) break
                 }
-                delay(40)
+                delay(35)
                 safety++
             }
+            if (multiplayerState.value.role == RoomRole.HOST) {
+                multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+            }
             _snackbarEvents.tryEmit("Draft completed! Review your Draft Report Card.")
+        }
+    }
+
+    // --- Multiplayer Lobby & Invite Controls ---
+
+    fun hostMultiplayerLobby(gmName: String, initialConfig: DraftConfig) {
+        viewModelScope.launch {
+            multiplayerCoordinator.hostNewRoom(gmName, initialConfig)
+                .onSuccess { code ->
+                    _snackbarEvents.tryEmit("Multiplayer Lobby ${RoomCrypto.formatInviteCodeForDisplay(code)} live! Share code to invite friends.")
+                }
+                .onFailure {
+                    _snackbarEvents.tryEmit(it.message ?: "Failed to create lobby")
+                }
+        }
+    }
+
+    fun joinMultiplayerLobby(
+        inviteCodeOrLink: String,
+        gmName: String,
+        teamName: String,
+        abbrev: String,
+        emblem: TeamEmblem,
+        primaryHex: Long,
+        secondaryHex: Long
+    ) {
+        viewModelScope.launch {
+            multiplayerCoordinator.joinFriendRoom(
+                rawCodeOrLink = inviteCodeOrLink,
+                gmDisplayName = gmName,
+                teamName = teamName,
+                abbreviation = abbrev,
+                emblem = emblem,
+                primaryColorHex = primaryHex,
+                secondaryColorHex = secondaryHex
+            ).onSuccess { code ->
+                _snackbarEvents.tryEmit("Connecting to Room ${RoomCrypto.formatInviteCodeForDisplay(code)}...")
+            }.onFailure { err ->
+                _snackbarEvents.tryEmit(err.message ?: "Invalid invite code")
+            }
+        }
+    }
+
+    fun addLocalPassAndPlayFriendToLobby(
+        gmName: String,
+        teamName: String,
+        abbrev: String,
+        emblem: TeamEmblem,
+        primaryHex: Long,
+        secondaryHex: Long
+    ) {
+        viewModelScope.launch {
+            multiplayerCoordinator.addLocalPassAndPlayFriend(gmName, teamName, abbrev, emblem, primaryHex, secondaryHex)
+                .onSuccess { _snackbarEvents.tryEmit("Added $gmName ($teamName) for Local Pass-and-Play!") }
+                .onFailure { _snackbarEvents.tryEmit(it.message ?: "Could not add friend") }
+        }
+    }
+
+    fun removeLobbyParticipant(clientId: String) {
+        viewModelScope.launch {
+            multiplayerCoordinator.removeParticipantFromLobby(clientId)
+        }
+    }
+
+    fun updateMultiplayerLobbyRules(config: DraftConfig, fillEmptyWithCpu: Boolean) {
+        viewModelScope.launch {
+            multiplayerCoordinator.updateHostDraftRules(config, fillEmptyWithCpu)
+        }
+    }
+
+    fun randomizeMultiplayerLobbyOrder() {
+        viewModelScope.launch {
+            multiplayerCoordinator.randomizeLobbyDraftOrder()
+        }
+    }
+
+    fun moveMultiplayerParticipantOrder(clientId: String, moveUp: Boolean) {
+        viewModelScope.launch {
+            multiplayerCoordinator.moveParticipantSlot(clientId, moveUp)
+        }
+    }
+
+    fun launchMultiplayerDraftFromLobby() {
+        viewModelScope.launch {
+            multiplayerCoordinator.launchMultiplayerDraft()
+                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onFailure { _snackbarEvents.tryEmit(it.message ?: "Cannot launch draft yet") }
+        }
+    }
+
+    fun updateGuestLobbyProfileAndReady(
+        gmName: String,
+        teamName: String,
+        abbrev: String,
+        emblem: TeamEmblem,
+        primaryHex: Long,
+        secondaryHex: Long,
+        isReady: Boolean
+    ) {
+        viewModelScope.launch {
+            multiplayerCoordinator.updateGuestProfileAndReady(gmName, teamName, abbrev, emblem, primaryHex, secondaryHex, isReady)
+        }
+    }
+
+    fun sendMultiplayerChatMessage(text: String) {
+        viewModelScope.launch {
+            multiplayerCoordinator.sendChatMessage(text)
+        }
+    }
+
+    fun markMultiplayerChatRead() {
+        multiplayerCoordinator.markChatRead()
+    }
+
+    fun leaveMultiplayerRoom() {
+        viewModelScope.launch {
+            multiplayerCoordinator.leaveMultiplayerRoom()
+        }
+    }
+
+    fun buildMultiplayerInviteShareText(): String =
+        multiplayerCoordinator.buildInviteShareMessage()
+
+    fun saveCustomMultiplayerRelayUrl(url: String) {
+        viewModelScope.launch {
+            multiplayerCoordinator.saveCustomRelayServerUrl(url)
         }
     }
 
@@ -610,14 +872,33 @@ class MainViewModel(
     ) {
         viewModelScope.launch {
             repository.customizeUserFranchise(name, abbrev, emblem, primaryHex, secondaryHex)
-                .onSuccess { _snackbarEvents.tryEmit("Updated franchise identity to $name ($abbrev).") }
+                .onSuccess {
+                    val mp = multiplayerState.value
+                    if (mp.role == RoomRole.GUEST) {
+                        multiplayerCoordinator.updateGuestProfileAndReady(
+                            gmName = mp.localGmName,
+                            teamName = name,
+                            abbreviation = abbrev,
+                            emblem = emblem,
+                            primaryColorHex = primaryHex,
+                            secondaryColorHex = secondaryHex,
+                            isReady = true
+                        )
+                    } else if (mp.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
+                    _snackbarEvents.tryEmit("Updated franchise identity to $name ($abbrev).")
+                }
         }
     }
 
     fun autoSetOptimalLineup() {
         viewModelScope.launch {
             repository.applyRecommendedUserLineup()
-                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onSuccess {
+                    multiplayerCoordinator.syncLineupAfterLocalChange()
+                    _snackbarEvents.tryEmit(it)
+                }
                 .onFailure { _snackbarEvents.tryEmit(it.message ?: "Could not set lineup") }
         }
     }
@@ -625,7 +906,10 @@ class MainViewModel(
     fun assignLineupSlot(playerId: Long, targetSlot: LineupSlot) {
         viewModelScope.launch {
             repository.assignPlayerToSlot(playerId, targetSlot)
-                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onSuccess {
+                    multiplayerCoordinator.syncLineupAfterLocalChange()
+                    _snackbarEvents.tryEmit(it)
+                }
                 .onFailure { _snackbarEvents.tryEmit(it.message ?: "Invalid lineup move") }
         }
     }
@@ -633,21 +917,21 @@ class MainViewModel(
     // --- Trades & Season ---
 
     fun submitTradeProposal(
-        cpuTeamId: String,
+        targetTeamId: String,
         offeredPlayerIds: List<Long>,
         offeredCashCad: Long,
         requestedPlayerIds: List<Long>,
         requestedCashCad: Long
     ) {
         viewModelScope.launch {
-            repository.proposeTradeToCpu(
-                cpuTeamId = cpuTeamId,
+            multiplayerCoordinator.submitMultiplayerTradeProposal(
+                targetTeamId = targetTeamId,
                 offeredPlayerIds = offeredPlayerIds,
                 offeredCashCad = offeredCashCad,
                 requestedPlayerIds = requestedPlayerIds,
                 requestedCashCad = requestedCashCad
-            ).onSuccess { verdict ->
-                _snackbarEvents.tryEmit(verdict.gmReasoning)
+            ).onSuccess { msg ->
+                _snackbarEvents.tryEmit(msg)
             }.onFailure { err ->
                 _snackbarEvents.tryEmit(err.message ?: "Trade invalid")
             }
@@ -656,8 +940,15 @@ class MainViewModel(
 
     fun solicitCpuTradeOffer() {
         viewModelScope.launch {
+            if (multiplayerState.value.role == RoomRole.GUEST) {
+                _snackbarEvents.tryEmit("In multiplayer leagues, propose trades directly to friends or CPU GMs below!")
+                return@launch
+            }
             repository.solicitIncomingCpuOffer()
                 .onSuccess { prop ->
+                    if (multiplayerState.value.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
                     _snackbarEvents.tryEmit("New trade offer received from ${prop.proposerTeamName}!")
                 }
                 .onFailure { err ->
@@ -668,7 +959,7 @@ class MainViewModel(
 
     fun respondToTradeOffer(tradeId: Long, accept: Boolean) {
         viewModelScope.launch {
-            repository.respondToIncomingProposal(tradeId, accept)
+            multiplayerCoordinator.submitMultiplayerTradeResponse(tradeId, accept)
                 .onSuccess { _snackbarEvents.tryEmit(it) }
                 .onFailure { _snackbarEvents.tryEmit(it.message ?: "Trade failed") }
         }
@@ -676,16 +967,34 @@ class MainViewModel(
 
     fun simulateNextWeek() {
         viewModelScope.launch {
+            if (multiplayerState.value.role == RoomRole.GUEST) {
+                _snackbarEvents.tryEmit("Waiting for the Host Commissioner to simulate the next week for all GMs.")
+                return@launch
+            }
             repository.simulateNextSeasonWeek()
-                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onSuccess { msg ->
+                    if (multiplayerState.value.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
+                    _snackbarEvents.tryEmit(msg)
+                }
                 .onFailure { _snackbarEvents.tryEmit(it.message ?: "Could not simulate week") }
         }
     }
 
     fun launchNextSeason() {
         viewModelScope.launch {
+            if (multiplayerState.value.role == RoomRole.GUEST) {
+                _snackbarEvents.tryEmit("Only the Host Commissioner can advance to the next season.")
+                return@launch
+            }
             repository.startNextFantasySeason()
-                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onSuccess { msg ->
+                    if (multiplayerState.value.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
+                    _snackbarEvents.tryEmit(msg)
+                }
         }
     }
 
@@ -698,6 +1007,9 @@ class MainViewModel(
     fun saveScoringWeights(weights: ScoringWeights) {
         viewModelScope.launch {
             repository.updateScoringWeights(weights)
+            if (multiplayerState.value.role == RoomRole.HOST) {
+                multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+            }
             _snackbarEvents.tryEmit("Fantasy scoring weights updated across all players.")
         }
     }
@@ -705,7 +1017,12 @@ class MainViewModel(
     fun saveEconomySettings(config: EconomyConfig, recalculateCurrentTreasury: Boolean) {
         viewModelScope.launch {
             repository.updateEconomySettings(config, recalculateCurrentTreasury)
-                .onSuccess { _snackbarEvents.tryEmit(it) }
+                .onSuccess {
+                    if (multiplayerState.value.role == RoomRole.HOST) {
+                        multiplayerCoordinator.broadcastAuthoritativeSnapshot()
+                    }
+                    _snackbarEvents.tryEmit(it)
+                }
         }
     }
 
@@ -726,11 +1043,14 @@ class MainViewModel(
     }
 
     companion object {
-        fun factory(repository: NhlFantasyRepository): ViewModelProvider.Factory =
+        fun factory(
+            repository: NhlFantasyRepository,
+            multiplayerCoordinator: MultiplayerCoordinator
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return MainViewModel(repository) as T
+                    return MainViewModel(repository, multiplayerCoordinator) as T
                 }
             }
     }

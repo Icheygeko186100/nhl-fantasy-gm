@@ -1,32 +1,52 @@
 # NHL Fantasy GM — Ultimate Fantasy Hockey Simulator (Android)
 
-**NHL Fantasy GM** is a native Kotlin & Jetpack Compose Android hockey general-manager simulator built for **Android 16 / One UI 8 (API 36)** and optimized for high-density displays such as the **Samsung Galaxy S22 Ultra**.
+**NHL Fantasy GM** (`v1.1.0`) is a native Kotlin & Jetpack Compose Android hockey general-manager simulator built for **Android 16 / One UI 8 (API 36)** and optimized for high-density displays such as the **Samsung Galaxy S22 Ultra** — featuring both **Single-Player vs Smart CPU GMs** and **Real-Time Multiplayer Drafts, Invites & Leagues with Friends**.
 
 > **Simulation & No-Gambling Notice:** All financial balances, player prices, contracts, and matchup rewards use **fictional Virtual Canadian Dollars (CAD)** (`$100,000,000 CAD` default starting treasury). There is **zero** real-money gambling, wagering, deposits, withdrawals, or paid player purchases.
 
 ---
 
-## 1. Architecture & Technology Stack
+## 1. Real-Time Multiplayer Drafts, Friend Invites & Leagues (`v1.1.0`)
+
+Real players can invite friends to join their draft and play together across Android devices — with **zero account signup** and **zero embedded private API keys**:
+
+- **Host & Invite Real Players:**
+  - Open **Draft → Multiplayer Friends → Create Lobby & Get Invite Code** to generate a 6-character Room Invite Code (e.g. `K9M-4P2`) and a one-tap deep link (`nhlfantasygm://join?code=K9M4P2`).
+  - Tap **Invite Friends** to share the invite code and deep link via SMS, WhatsApp, Discord, Messenger, or Email using Android's native Share Sheet.
+- **One-Tap Deep Link or Code Join:**
+  - Friends tap the `nhlfantasygm://join?code=...` link (or enter `K9M-4P2` under **Join Friend's Draft**), customize their own Franchise Name, 3-Letter Abbreviation, Crest Emblem, and Team Colors, and mark **Ready to Draft ✓**.
+- **Flexible Human + Optional CPU League Slots (Never Fake Bots):**
+  - Supports **2 to 16 teams**: pure Human-vs-Human leagues (`0 CPU GMs`), Online Friends + Local **Pass-and-Play** Friends on the same phone, or Human Friends + explicitly labeled **CPU GMs** filling remaining slots. CPU GMs are never disguised as fake online users.
+- **Authoritative Conflict-Free Draft & Live War Room:**
+  - Real-time synchronized draft board, turn clock, positional/cap validation, **Live Draft & Lobby Chat**, synchronized lineups, Marketplace signings/sales, **live Human-to-Human Player + Virtual CAD Trade Proposals** (`PENDING` offers that friends can Accept or Reject on their phones), and Commissioner week simulation broadcasts.
+- **End-to-End Encrypted (`AES-256-GCM`) Zero-Setup Relay + Self-Hosted Option:**
+  - All room payloads are compressed (`GZIP`) and encrypted on-device with **`AES-256-GCM`** (`PBKDF2-HMAC-SHA256` derived from the 6-character invite code) over TLS WebSockets (`MQTT 3.1.1 over WSS` out-of-the-box).
+  - Includes an optional zero-knowledge Node.js WebSocket relay server in [`backend/relay-server.js`](backend/relay-server.js) (`Dockerfile` included) configurable under **League → Settings → Multiplayer & Custom Relay Server**.
+
+---
+
+## 2. Architecture & Technology Stack
 
 - **Language & UI:** 100% Kotlin (`2.0.21`) + Jetpack Compose (Material 3, custom `Canvas` hockey crests and statistical charts, edge-to-edge One UI 8 layout).
 - **Target / Compile SDK:** `compileSdk = 36`, `targetSdk = 36` (Android 16), `minSdk = 28`.
 - **Architecture:** Clean separation across:
+  - `multiplayer` — `RoomCrypto` (`AES-256-GCM` + `GZIP` + `nhlfantasygm://join` deep links), `MqttPacketCodec` & `MqttWebSocketTransport` / `CustomRelayWebSocketTransport`, and `MultiplayerCoordinator` (authoritative Host & Guest state synchronization).
   - `data/remote` — OkHttp + Kotlinx Serialization clients for official NHL and public hockey feeds with concurrency throttling and error recovery.
-  - `data/local` — **Room SQLite Database** (`nhl_fantasy_gm.db`) persisting all 32 NHL teams, 1,200+ active players & prospects, franchise ownership, lineups, draft sessions, trades, season schedules, historical banners, and transaction ledgers; **DataStore Preferences** for user settings; **Android Keystore `EncryptedSharedPreferences`** for optional external API credentials.
+  - `data/local` — **Room SQLite Database (`v2` with lossless `MIGRATION_1_2`)** (`nhl_fantasy_gm.db`) persisting all 32 NHL teams, 1,200+ active players & prospects, multi-GM franchise ownership, lineups, draft sessions, trades, season schedules, historical banners, and transaction ledgers; **DataStore Preferences** for user & room settings; **Android Keystore `EncryptedSharedPreferences`** for optional external API credentials.
   - `domain` — Pure, unit-tested game engines:
     - `FantasyScoringEngine` (configurable fantasy weights, daily/weekly/season points, bargains, breakouts, transparent breakdowns)
     - `PlayerValuationEngine` (transparent OVR rating, simulated NHL salary cap hit, purchase/sell prices, deterministic price-change explanations)
     - `GameTransactionEngine` (budget, salary cap, duplicate-ownership, roster-size, and high-value confirmation validation + P&L statements)
     - `DraftEngine` (Snake & Standard drafts, positional requirement feasibility checks, smart CPU GM AI, local Undo rollback, post-draft grades)
     - `LineupAnalyticsEngine` (Forward Lines 1–4, Defense Pairings 1–3, Goalies 1–2, Bench, IR, optimal lineup generator, strict position/injury slot validation)
-    - `TradeEvaluationEngine` (player-for-player and player + virtual CAD trades with CPU GMs + incoming CPU trade offers)
-    - `SeasonSimulationEngine` (14-week round-robin schedule, real-NHL-stats matchup scoring + optional offline simulation fallback, Semifinal & Championship Final bracket, Season Awards)
+    - `TradeEvaluationEngine` (player-for-player and player + virtual CAD trades with both **Real Friends** and **CPU GMs**)
+    - `SeasonSimulationEngine` (14-week round-robin schedule supporting 2–16 teams, real-NHL-stats matchup scoring + optional offline simulation fallback, Semifinal & Championship Final bracket, Season Awards)
   - `worker` — `WorkManager` (`NhlDataSyncWorker`) periodic background statistics synchronization.
   - `ui` — 5-tab bottom navigation (`Home`, `Draft`, `Marketplace`, `My Team`, `League`) with Dark Rink theme by default and optional Ice Arena Light theme.
 
 ---
 
-## 2. Real NHL Data Sources Used
+## 3. Real NHL Data Sources Used
 
 No API keys are embedded in the APK, and **no paid subscription or API key is required** for full live functionality:
 
@@ -46,48 +66,37 @@ No API keys are embedded in the APK, and **no paid subscription or API key is re
 
 ---
 
-## 3. Installing the APK on Samsung Galaxy S22 Ultra (Android 16 / One UI 8)
+## 4. Installing the APK on Samsung Galaxy S22 Ultra (Android 16 / One UI 8)
 
 ### APK Output Paths
-- Release Output Directory: `release/NHLFantasyGM-v1.0.0-release.apk`
+- Release Output Directory: `release/NHLFantasyGM-v1.1.0-release.apk`
 - Gradle Build Output: `app/build/outputs/apk/release/app-release.apk`
 
-### Option A — Direct Phone Install (USB Copy / Cloud Drive)
-1. Copy `NHLFantasyGM-v1.0.0-release.apk` to your Samsung Galaxy S22 Ultra (via USB file transfer into `Downloads`).
-2. Open Samsung **My Files** → **Downloads** and tap `NHLFantasyGM-v1.0.0-release.apk`.
+### Option A — Direct Phone Install (USB Copy / GitHub Release)
+1. Download `NHLFantasyGM-v1.1.0-release.apk` (signed with the same release certificate as `v1.0.0`, so it upgrades seamlessly in-place while preserving your data).
+2. Open Samsung **My Files** → **Downloads** and tap `NHLFantasyGM-v1.1.0-release.apk`.
 3. If prompted by One UI 8 / Android 16 security:
    - Tap **Settings** → enable **Allow from this source** for *My Files* (if **Auto Blocker** is enabled under *Settings → Security and privacy → Auto Blocker*, temporarily toggle Auto Blocker off during sideloading, then re-enable it afterward).
-4. Tap **Install**, then tap **Open**.
+4. Tap **Install** (or **Update**), then tap **Open**.
 
 ### Option B — Install via ADB over USB
-1. On your S22 Ultra, open **Settings → About phone → Software information** and tap **Build number** 7 times to enable **Developer options**.
-2. Open **Settings → Developer options** and enable **USB debugging** (ensure *Auto Blocker* is off if USB debugging is greyed out).
-3. Connect the phone to your PC via USB-C and run:
-   ```powershell
-   "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "release\NHLFantasyGM-v1.0.0-release.apk"
-   ```
+```powershell
+"$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "release\NHLFantasyGM-v1.1.0-release.apk"
+```
 
 ---
 
-## 4. Configuring Optional API Keys
+## 5. Optional Self-Hosted Multiplayer Relay Server (`backend/`)
 
-- **Out of the Box:** No API key configuration is needed. All NHL rosters, prospects, live stats, scores, injuries, and news sync automatically over HTTPS.
-- **Optional External Provider Key:** Under **League → Settings → Data Sources & Secure API Key Storage**, you may optionally enter an external commercial sports-data key. It is encrypted locally on-device using hardware-backed **Android Keystore (`EncryptedSharedPreferences`)** and is never hardcoded into source code or the APK.
+Multiplayer works **out of the box** without running any server. If you want to host a private LAN or cloud relay server:
 
----
+```bash
+cd backend
+npm install
+PORT=8787 npm start
+```
 
-## 5. Online vs. Offline Capabilities
-
-| Feature | Requires Internet? | Behavior When Offline |
-| :--- | :--- | :--- |
-| Live NHL Roster, Stats & Injury Sync | **Yes** | Automatically falls back to cached Room database (`CACHED DATA` badge + exact last-synced timestamp). |
-| Today's Live NHL Game Scores & Boxscores | **Yes** | Displays last cached scoreboard or clear empty-state notice without fake live badges. |
-| NHL News Headlines | **Yes** | Displays cached headlines; tapping external article URLs requires internet. |
-| Player Career Charts (`/player/{id}/landing`) | **First view only** | Cached in Room after viewing so charts remain viewable offline. |
-| Virtual CAD Economy, Marketplace Buy/Sell, Watchlist | **No** (once synced) | 100% usable offline with full persistence across restarts/reboots. |
-| Fantasy Draft Mode (Snake/Linear, CPU GMs, Undo) | **No** (once synced) | 100% playable offline. |
-| My Team Branding, Lineup Builder & Trades | **No** (once synced) | 100% playable offline. |
-| Fantasy Season Matchups, Playoffs & Awards | **No** | Uses cached real NHL stats, or optional clearly-labeled **Offline Sim Mode** if no stats have been synced yet. |
+Then enter `ws://<your-ip>:8787/ws` (or `wss://your-domain.example.com/ws` behind TLS) under **League → Settings → Multiplayer & Custom Relay Server** on each participating device.
 
 ---
 
@@ -96,11 +105,9 @@ No API keys are embedded in the APK, and **no paid subscription or API key is re
 Ensure **JDK 17 or JDK 21** (`JAVA_HOME`) and **Android SDK Platform 36** (`ANDROID_HOME` or `local.properties`) are configured, then run from the project root:
 
 ```powershell
-# Run all Unit Tests, Valuation/Scoring/Draft/Trade Engine Tests, and Robolectric Compose UI Tests
+# Run all Unit Tests, Multiplayer E2E Tests, Engine Tests, and Robolectric Compose UI Tests
 .\gradlew.bat testDebugUnitTest
 
 # Build the Release APK
 .\gradlew.bat assembleRelease
 ```
-
-*(Note: If `keystore.properties` is present locally, `assembleRelease` signs with your release keystore; otherwise `app/build.gradle.kts` cleanly falls back to standard signing so fresh clones still produce an installable APK immediately.)*

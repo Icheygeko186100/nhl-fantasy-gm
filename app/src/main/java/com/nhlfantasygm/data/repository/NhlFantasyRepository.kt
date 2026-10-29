@@ -5,10 +5,15 @@ import com.nhlfantasygm.data.local.*
 import com.nhlfantasygm.data.remote.*
 import com.nhlfantasygm.domain.*
 import com.nhlfantasygm.model.*
+import com.nhlfantasygm.multiplayer.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -19,7 +24,7 @@ class NhlFantasyRepository(
     private val database: NhlFantasyDatabase,
     private val dao: NhlFantasyDao,
     private val remote: NhlRemoteDataSource,
-    private val settingsStore: SettingsDataStore,
+    val settingsStore: SettingsDataStore,
     private val credentialStore: SecureCredentialStore
 ) {
     private val syncMutex = Mutex()
@@ -28,7 +33,18 @@ class NhlFantasyRepository(
     val nhlTeamsFlow: Flow<List<NhlTeamEntity>> = dao.observeNhlTeams()
     val allPlayersFlow: Flow<List<PlayerEntity>> = dao.observeAllPlayers()
     val fantasyTeamsFlow: Flow<List<FantasyTeamEntity>> = dao.observeFantasyTeams()
-    val humanTeamFlow: Flow<FantasyTeamEntity?> = dao.observeHumanTeam()
+    val settingsFlow: Flow<UserAppSettings> = settingsStore.settingsFlow
+
+    val controlledTeamIdFlow: Flow<String> = settingsFlow
+        .map { it.controlledTeamId.ifBlank { USER_TEAM_ID } }
+        .distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val humanTeamFlow: Flow<FantasyTeamEntity?> = controlledTeamIdFlow
+        .flatMapLatest { controlledId ->
+            dao.observeFantasyTeamById(controlledId)
+        }
+
     val transactionsFlow: Flow<List<TransactionEntity>> = dao.observeTransactions()
     val draftSessionFlow: Flow<DraftSessionEntity?> = dao.observeDraftSession()
     val draftPicksFlow: Flow<List<DraftPickEntity>> = dao.observeDraftPicks()
@@ -38,9 +54,11 @@ class NhlFantasyRepository(
     val liveGamesFlow: Flow<List<LiveNhlGameEntity>> = dao.observeLiveNhlGames()
     val newsHeadlinesFlow: Flow<List<NewsHeadlineEntity>> = dao.observeNewsHeadlines()
     val syncStatusFlow: Flow<SyncStatusEntity?> = dao.observeSyncStatus()
-    val settingsFlow: Flow<UserAppSettings> = settingsStore.settingsFlow
 
     fun observeTeamRoster(teamId: String): Flow<List<PlayerEntity>> = dao.observeTeamRoster(teamId)
+
+    suspend fun getActiveControlledTeamId(): String =
+        settingsFlow.first().controlledTeamId.ifBlank { USER_TEAM_ID }
 
     /**
      * Ensures the user's franchise, default 8-team league, and initial schedule exist on first launch.
@@ -632,16 +650,17 @@ class NhlFantasyRepository(
         dao.setWatchlisted(playerId, !player.isWatchlisted)
     }
 
-    suspend fun buyPlayerFromMarketplace(playerId: Long): Result<String> {
+    suspend fun buyPlayerFromMarketplace(playerId: Long, actingTeamId: String? = null): Result<String> {
         val settings = settingsFlow.first()
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User franchise not initialized"))
-        val roster = dao.getTeamRosterOnce(USER_TEAM_ID)
+        val teamId = actingTeamId ?: getActiveControlledTeamId()
+        val buyerTeam = dao.getFantasyTeamById(teamId)
+            ?: return Result.failure(IllegalStateException("Franchise not initialized"))
+        val roster = dao.getTeamRosterOnce(teamId)
         val player = dao.getPlayerById(playerId)
             ?: return Result.failure(IllegalArgumentException("Player not found"))
 
         val validation = GameTransactionEngine.validatePlayerPurchase(
-            buyerTeam = userTeam,
+            buyerTeam = buyerTeam,
             currentRoster = roster,
             targetPlayer = player,
             economyConfig = settings.economyConfig
@@ -650,21 +669,21 @@ class NhlFantasyRepository(
             return Result.failure(IllegalStateException(validation.reason))
         }
 
-        val newBalance = userTeam.cashBalanceCad - player.purchasePriceCad
+        val newBalance = buyerTeam.cashBalanceCad - player.purchasePriceCad
         val updatedRoster = LineupAnalyticsEngine.generateRecommendedLineup(
             roster + player.copy(
-                ownerFantasyTeamId = USER_TEAM_ID,
+                ownerFantasyTeamId = teamId,
                 acquisitionPriceCad = player.purchasePriceCad
             )
         )
 
         database.withTransaction {
-            dao.upsertFantasyTeam(userTeam.copy(cashBalanceCad = newBalance))
+            dao.upsertFantasyTeam(buyerTeam.copy(cashBalanceCad = newBalance))
             dao.updatePlayers(updatedRoster)
             dao.insertTransaction(
                 TransactionEntity(
                     type = "BUY",
-                    teamId = USER_TEAM_ID,
+                    teamId = teamId,
                     counterpartyLabel = "NHL Marketplace",
                     playerIdsCsv = player.playerId.toString(),
                     title = "Signed ${player.fullName} (${player.position.uiShort})",
@@ -678,23 +697,24 @@ class NhlFantasyRepository(
         return Result.success("Signed ${player.fullName} for ${CadFormatter.formatCompact(player.purchasePriceCad)}!")
     }
 
-    suspend fun sellPlayerToMarketplace(playerId: Long): Result<String> {
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User franchise not initialized"))
+    suspend fun sellPlayerToMarketplace(playerId: Long, actingTeamId: String? = null): Result<String> {
+        val teamId = actingTeamId ?: getActiveControlledTeamId()
+        val sellerTeam = dao.getFantasyTeamById(teamId)
+            ?: return Result.failure(IllegalStateException("Franchise not initialized"))
         val player = dao.getPlayerById(playerId)
             ?: return Result.failure(IllegalArgumentException("Player not found"))
 
-        val validation = GameTransactionEngine.validatePlayerSale(userTeam, player)
+        val validation = GameTransactionEngine.validatePlayerSale(sellerTeam, player)
         if (validation is TransactionValidationResult.Invalid) {
             return Result.failure(IllegalStateException(validation.reason))
         }
 
         val costBasis = if (player.acquisitionPriceCad > 0L) player.acquisitionPriceCad else player.purchasePriceCad
         val realizedPnL = player.sellPriceCad - costBasis
-        val newBalance = userTeam.cashBalanceCad + player.sellPriceCad
+        val newBalance = sellerTeam.cashBalanceCad + player.sellPriceCad
 
         database.withTransaction {
-            dao.upsertFantasyTeam(userTeam.copy(cashBalanceCad = newBalance))
+            dao.upsertFantasyTeam(sellerTeam.copy(cashBalanceCad = newBalance))
             dao.updatePlayer(
                 player.copy(
                     ownerFantasyTeamId = null,
@@ -703,14 +723,14 @@ class NhlFantasyRepository(
                 )
             )
             // Re-optimize remaining starters
-            val remainingRoster = dao.getTeamRosterOnce(USER_TEAM_ID)
+            val remainingRoster = dao.getTeamRosterOnce(teamId)
             if (remainingRoster.isNotEmpty()) {
                 dao.updatePlayers(LineupAnalyticsEngine.generateRecommendedLineup(remainingRoster))
             }
             dao.insertTransaction(
                 TransactionEntity(
                     type = "SELL",
-                    teamId = USER_TEAM_ID,
+                    teamId = teamId,
                     counterpartyLabel = "NHL Marketplace",
                     playerIdsCsv = player.playerId.toString(),
                     title = "Sold ${player.fullName} (${player.position.uiShort})",
@@ -740,9 +760,14 @@ class NhlFantasyRepository(
             primaryColorHex = 0xFF00C2FF,
             secondaryColorHex = 0xFF0B192C,
             isHuman = true,
+            ownerType = "HUMAN_GM",
+            gmDisplayName = settings.gmDisplayName,
             cashBalanceCad = budget,
             startingBudgetCad = budget
         )).copy(
+            isHuman = true,
+            ownerType = "HUMAN_GM",
+            gmDisplayName = settings.gmDisplayName,
             cashBalanceCad = budget,
             startingBudgetCad = budget,
             wins = 0,
@@ -752,17 +777,18 @@ class NhlFantasyRepository(
             pointsAgainst = 0.0
         )
 
-        val cpuCount = (config.teamCount - 1).coerceIn(3, 15)
+        val cpuCount = (config.teamCount - 1).coerceIn(1, 15)
         val cpuTeams = createDefaultCpuTeams(cpuCount, budget)
 
         // Place user team at requested 1-based draft slot
         val slotIndex = (config.userDraftPosition - 1).coerceIn(0, cpuTeams.size)
         val orderedTeams = cpuTeams.toMutableList().apply { add(slotIndex, userTeam) }
+        val finalConfig = config.copy(teamCount = orderedTeams.size)
         val teamOrderCsv = orderedTeams.joinToString(",") { it.teamId }
 
         database.withTransaction {
             dao.releaseAllPlayerOwnership()
-            dao.deleteCpuTeams()
+            dao.deleteAllFantasyTeams()
             dao.upsertFantasyTeams(orderedTeams)
             dao.clearDraftPicks()
             dao.clearTradeProposals()
@@ -771,7 +797,7 @@ class NhlFantasyRepository(
                 DraftSessionEntity(
                     sessionId = 1,
                     status = "IN_PROGRESS",
-                    configJson = json.encodeToString(config),
+                    configJson = json.encodeToString(finalConfig),
                     teamOrderCsv = teamOrderCsv,
                     currentOverallPick = 1,
                     startedAtEpochMs = System.currentTimeMillis()
@@ -788,8 +814,8 @@ class NhlFantasyRepository(
                     teamId = USER_TEAM_ID,
                     counterpartyLabel = "Fantasy Draft Room",
                     playerIdsCsv = "",
-                    title = "Started ${config.teamCount}-Team ${if (config.isSnakeDraft) "Snake" else "Standard"} Draft",
-                    details = "${config.totalRounds} rounds • Draft Slot #${slotIndex + 1} • Treasury reset to ${CadFormatter.formatCompact(budget)}",
+                    title = "Started ${finalConfig.teamCount}-Team ${if (finalConfig.isSnakeDraft) "Snake" else "Standard"} Draft",
+                    details = "${finalConfig.totalRounds} rounds • Draft Slot #${slotIndex + 1} • Treasury reset to ${CadFormatter.formatCompact(budget)}",
                     cashDeltaCad = 0L,
                     balanceAfterCad = budget,
                     timestampEpochMs = System.currentTimeMillis()
@@ -800,12 +826,118 @@ class NhlFantasyRepository(
         // Sync economy salary cap setting if configured in draft
         settingsStore.updateEconomyConfig(
             settings.economyConfig.copy(
-                enforceSalaryCap = config.enforceSalaryCap,
-                salaryCapCad = config.salaryCapCad
+                enforceSalaryCap = finalConfig.enforceSalaryCap,
+                salaryCapCad = finalConfig.salaryCapCad
             )
         )
 
         return Result.success(Unit)
+    }
+
+    /**
+     * Authoritative Host initializer for a Multiplayer Draft with real invited friends,
+     * optional local pass-and-play friends, and optional CPU GMs filling remaining slots.
+     */
+    suspend fun startMultiplayerDraft(
+        config: DraftConfig,
+        orderedParticipants: List<LobbyParticipant>,
+        fillEmptyWithCpu: Boolean
+    ): Result<List<FantasyTeamEntity>> {
+        if (orderedParticipants.isEmpty()) {
+            return Result.failure(IllegalArgumentException("At least 1 human GM must be in the lobby"))
+        }
+        val settings = settingsFlow.first()
+        val budget = settings.economyConfig.startingBudgetCad
+
+        val humanTeams = orderedParticipants.map { p ->
+            val ownerType = when {
+                p.isHost -> "HUMAN_GM"
+                p.isLocalPassAndPlay -> "LOCAL_HUMAN_GM"
+                else -> "REMOTE_HUMAN_GM"
+            }
+            FantasyTeamEntity(
+                teamId = p.assignedTeamId,
+                teamName = p.teamName.trim().ifBlank { "${p.gmName}'s HC" }.take(28),
+                abbreviation = p.abbreviation.trim().uppercase().take(3).ifBlank { "NHL" },
+                emblemId = p.emblemId,
+                primaryColorHex = p.primaryColorHex,
+                secondaryColorHex = p.secondaryColorHex,
+                isHuman = true,
+                ownerType = ownerType,
+                gmDisplayName = p.gmName,
+                remoteClientId = p.clientId,
+                cashBalanceCad = budget,
+                startingBudgetCad = budget
+            )
+        }
+
+        val targetTotalTeams = if (fillEmptyWithCpu) {
+            maxOf(config.teamCount, humanTeams.size).coerceIn(2, 16)
+        } else {
+            humanTeams.size.coerceIn(2, 16)
+        }
+
+        if (!fillEmptyWithCpu && humanTeams.size < 2) {
+            return Result.failure(
+                IllegalStateException("Invite at least 1 friend (2+ human GMs) or enable 'Fill Open Slots with CPU GMs'.")
+            )
+        }
+
+        val cpuNeeded = (targetTotalTeams - humanTeams.size).coerceAtLeast(0)
+        val cpuTeams = createDefaultCpuTeams(cpuNeeded, budget)
+        val orderedTeams = humanTeams + cpuTeams
+        val hostSlot = (orderedTeams.indexOfFirst { it.teamId == USER_TEAM_ID } + 1).coerceAtLeast(1)
+        val finalConfig = config.copy(
+            teamCount = orderedTeams.size,
+            userDraftPosition = hostSlot
+        )
+        val teamOrderCsv = orderedTeams.joinToString(",") { it.teamId }
+
+        database.withTransaction {
+            dao.releaseAllPlayerOwnership()
+            dao.deleteAllFantasyTeams()
+            dao.upsertFantasyTeams(orderedTeams)
+            dao.clearDraftPicks()
+            dao.clearTradeProposals()
+            dao.clearMatchups()
+            dao.upsertDraftSession(
+                DraftSessionEntity(
+                    sessionId = 1,
+                    status = "IN_PROGRESS",
+                    configJson = json.encodeToString(finalConfig),
+                    teamOrderCsv = teamOrderCsv,
+                    currentOverallPick = 1,
+                    startedAtEpochMs = System.currentTimeMillis()
+                )
+            )
+            val schedule = SeasonSimulationEngine.generateRegularSeasonSchedule(
+                seasonNumber = settings.currentSeasonNumber,
+                teams = orderedTeams
+            )
+            dao.insertMatchups(schedule)
+            dao.insertTransaction(
+                TransactionEntity(
+                    type = "DRAFT",
+                    teamId = USER_TEAM_ID,
+                    counterpartyLabel = "Multiplayer Draft Room",
+                    playerIdsCsv = "",
+                    title = "Launched Multiplayer Draft (${humanTeams.size} Human GMs, ${cpuTeams.size} CPU GMs)",
+                    details = "${finalConfig.totalRounds} rounds • ${if (finalConfig.isSnakeDraft) "Snake" else "Standard"} order",
+                    cashDeltaCad = 0L,
+                    balanceAfterCad = budget,
+                    timestampEpochMs = System.currentTimeMillis()
+                )
+            )
+        }
+
+        settingsStore.updateEconomyConfig(
+            settings.economyConfig.copy(
+                enforceSalaryCap = finalConfig.enforceSalaryCap,
+                salaryCapCad = finalConfig.salaryCapCad
+            )
+        )
+
+        return Result.success(orderedTeams)
     }
 
     fun decodeDraftConfig(session: DraftSessionEntity?): DraftConfig {
@@ -814,7 +946,7 @@ class NhlFantasyRepository(
             .getOrDefault(DraftConfig())
     }
 
-    suspend fun makeHumanDraftPick(playerId: Long): Result<String> {
+    suspend fun makeHumanDraftPick(playerId: Long, actingTeamId: String? = null): Result<String> {
         val session = dao.getDraftSessionOnce()
             ?: return Result.failure(IllegalStateException("No active draft session"))
         if (session.status != "IN_PROGRESS") {
@@ -823,57 +955,90 @@ class NhlFantasyRepository(
 
         val config = decodeDraftConfig(session)
         val teamOrder = session.teamOrderCsv.split(",").filter { it.isNotBlank() }
-        val (round, pickInRound, activeTeamId) = DraftEngine.getPickMetadata(
+        val (round, pickInRound, onClockTeamId) = DraftEngine.getPickMetadata(
             session.currentOverallPick,
             teamOrder,
             config.isSnakeDraft
         )
-        if (activeTeamId != USER_TEAM_ID) {
-            return Result.failure(IllegalStateException("It is currently a CPU GM's turn on the clock"))
+
+        val onClockTeam = dao.getFantasyTeamById(onClockTeamId)
+            ?: return Result.failure(IllegalStateException("On-clock team missing"))
+
+        val controlledId = getActiveControlledTeamId()
+        val permittedTeamId = when {
+            actingTeamId != null -> actingTeamId
+            onClockTeamId == controlledId -> controlledId
+            onClockTeam.ownerType == "LOCAL_HUMAN_GM" && controlledId == USER_TEAM_ID -> onClockTeamId
+            else -> null
         }
 
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User team missing"))
-        val currentRoster = dao.getTeamRosterOnce(USER_TEAM_ID)
+        if (permittedTeamId == null || permittedTeamId != onClockTeamId) {
+            val whoLabel = when (onClockTeam.ownerType) {
+                "REMOTE_HUMAN_GM" -> "${onClockTeam.teamName} (${onClockTeam.gmDisplayName.ifBlank { "Online Friend" }})"
+                "HUMAN_GM" -> "${onClockTeam.teamName} (Host)"
+                else -> "CPU GM (${onClockTeam.teamName})"
+            }
+            return Result.failure(IllegalStateException("Waiting on $whoLabel — it is not your turn on the clock."))
+        }
+
+        val currentRoster = dao.getTeamRosterOnce(onClockTeam.teamId)
         val player = dao.getPlayerById(playerId)
             ?: return Result.failure(IllegalArgumentException("Player not found"))
 
-        val err = DraftEngine.validateDraftPick(userTeam, currentRoster, player, config)
+        val err = DraftEngine.validateDraftPick(onClockTeam, currentRoster, player, config)
         if (err != null) {
             return Result.failure(IllegalStateException(err))
         }
 
+        val gmTag = onClockTeam.gmDisplayName.takeIf { it.isNotBlank() }?.let { "GM $it" } ?: "GM"
         executeSingleDraftPickAtomically(
             session = session,
             config = config,
             round = round,
             pickInRound = pickInRound,
-            team = userTeam,
+            team = onClockTeam,
             currentRoster = currentRoster,
             player = player,
-            rationale = "GM manual selection (Rd $round, Pick #$pickInRound)"
+            rationale = "$gmTag selection (Rd $round, Pick #$pickInRound)"
         )
-        return Result.success("Drafted ${player.fullName} (${player.position.uiShort}, ${player.overallRating} OVR)!")
+        return Result.success("${onClockTeam.abbreviation} drafted ${player.fullName} (${player.position.uiShort}, ${player.overallRating} OVR)!")
     }
 
-    suspend fun autoPickForHuman(): Result<String> {
+    suspend fun autoPickForHuman(actingTeamId: String? = null): Result<String> {
         val session = dao.getDraftSessionOnce()
             ?: return Result.failure(IllegalStateException("No active draft"))
         val config = decodeDraftConfig(session)
+        val teamOrder = session.teamOrderCsv.split(",").filter { it.isNotBlank() }
+        val (_, _, onClockTeamId) = DraftEngine.getPickMetadata(
+            session.currentOverallPick,
+            teamOrder,
+            config.isSnakeDraft
+        )
+        val onClockTeam = dao.getFantasyTeamById(onClockTeamId)
+            ?: return Result.failure(IllegalStateException("On-clock team missing"))
+
+        val controlledId = getActiveControlledTeamId()
+        val targetTeamId = actingTeamId ?: when {
+            onClockTeamId == controlledId -> controlledId
+            onClockTeam.ownerType == "LOCAL_HUMAN_GM" && controlledId == USER_TEAM_ID -> onClockTeamId
+            else -> controlledId
+        }
+
         val settings = settingsFlow.first()
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User team missing"))
-        val roster = dao.getTeamRosterOnce(USER_TEAM_ID)
+        val team = dao.getFantasyTeamById(targetTeamId)
+            ?: return Result.failure(IllegalStateException("Team missing"))
+        val roster = dao.getTeamRosterOnce(targetTeamId)
         val available = dao.getAllPlayersOnce().filter { it.ownerFantasyTeamId == null }
 
-        val choice = DraftEngine.selectBestCpuPick(userTeam, roster, available, config, settings.scoringWeights)
+        val choice = DraftEngine.selectBestCpuPick(team, roster, available, config, settings.scoringWeights)
             ?: return Result.failure(IllegalStateException("No valid player available for auto-pick"))
 
-        return makeHumanDraftPick(choice.player.playerId)
+        return makeHumanDraftPick(choice.player.playerId, actingTeamId = targetTeamId)
     }
 
     /**
-     * Advances CPU picks automatically until it is the user's turn again (or the draft finishes).
+     * Advances ONLY `CPU_GM` picks automatically, stopping immediately whenever any human GM
+     * (`HUMAN_GM`, `REMOTE_HUMAN_GM`, or `LOCAL_HUMAN_GM`) is on the clock or the draft finishes.
      */
     suspend fun advanceCpuDraftPicks(maxSteps: Int = 32): Result<Int> {
         var picksMade = 0
@@ -895,16 +1060,16 @@ class NhlFantasyRepository(
                 config.isSnakeDraft
             )
 
-            if (onClockTeamId == USER_TEAM_ID) {
-                break // User is on the clock!
+            val onClockTeam = dao.getFantasyTeamById(onClockTeamId) ?: break
+            if (!onClockTeam.isCpuGm) {
+                break // A real human GM (Host, Online Invited Friend, or Local Friend) is on the clock!
             }
 
-            val cpuTeam = dao.getFantasyTeamById(onClockTeamId) ?: break
             val cpuRoster = dao.getTeamRosterOnce(onClockTeamId)
             val availablePool = dao.getAllPlayersOnce().filter { it.ownerFantasyTeamId == null }
 
             val choice = DraftEngine.selectBestCpuPick(
-                cpuTeam = cpuTeam,
+                cpuTeam = onClockTeam,
                 cpuCurrentRoster = cpuRoster,
                 availablePool = availablePool,
                 config = config,
@@ -916,7 +1081,7 @@ class NhlFantasyRepository(
                 config = config,
                 round = round,
                 pickInRound = pickInRound,
-                team = cpuTeam,
+                team = onClockTeam,
                 currentRoster = cpuRoster,
                 player = choice.player,
                 rationale = choice.rationale
@@ -981,11 +1146,11 @@ class NhlFantasyRepository(
                 dao.insertTransaction(
                     TransactionEntity(
                         type = "DRAFT",
-                        teamId = USER_TEAM_ID,
+                        teamId = team.teamId,
                         counterpartyLabel = "Round $round • Pick #${session.currentOverallPick}",
                         playerIdsCsv = player.playerId.toString(),
                         title = "Drafted ${player.fullName} (${player.position.uiShort})",
-                        details = "${player.teamAbbrev} • ${player.overallRating} OVR • Cap Hit ${CadFormatter.formatCompact(player.capHitCad)}",
+                        details = "${team.teamName} • ${player.teamAbbrev} • ${player.overallRating} OVR • Cap Hit ${CadFormatter.formatCompact(player.capHitCad)}",
                         cashDeltaCad = -player.purchasePriceCad,
                         balanceAfterCad = newCash,
                         timestampEpochMs = now
@@ -999,6 +1164,10 @@ class NhlFantasyRepository(
      * Undoes the user's most recent local draft pick and any subsequent CPU picks cleanly.
      */
     suspend fun undoLastHumanDraftPick(): Result<String> {
+        val allTeams = dao.getFantasyTeamsOnce()
+        if (allTeams.any { it.isRemoteHumanGm }) {
+            return Result.failure(IllegalStateException("Undo is disabled in live multi-device online drafts."))
+        }
         val session = dao.getDraftSessionOnce()
             ?: return Result.failure(IllegalStateException("No draft session to undo"))
         val picks = dao.getDraftPicksOnce()
@@ -1006,7 +1175,7 @@ class NhlFantasyRepository(
             ?: return Result.failure(IllegalStateException("No user draft pick to undo yet"))
 
         val picksToRollback = picks.filter { it.overallPick >= targetOverall }
-        val teamsById = dao.getFantasyTeamsOnce().associateBy { it.teamId }.toMutableMap()
+        val teamsById = allTeams.associateBy { it.teamId }.toMutableMap()
         val playersToRelease = mutableListOf<PlayerEntity>()
 
         for (pick in picksToRollback) {
@@ -1041,27 +1210,27 @@ class NhlFantasyRepository(
                     completedAtEpochMs = 0L
                 )
             )
-            // Re-optimize user lineup for remaining players
-            val userRemaining = dao.getTeamRosterOnce(USER_TEAM_ID)
+            // Re-optimize human lineup for remaining players
+            val userRemaining = dao.getTeamRosterOnce(undoneHumanPick.fantasyTeamId)
             if (userRemaining.isNotEmpty()) {
                 dao.updatePlayers(LineupAnalyticsEngine.generateRecommendedLineup(userRemaining))
             }
             dao.insertTransaction(
                 TransactionEntity(
                     type = "DRAFT",
-                    teamId = USER_TEAM_ID,
+                    teamId = undoneHumanPick.fantasyTeamId,
                     counterpartyLabel = "Draft Undo",
                     playerIdsCsv = undoneHumanPick.playerId.toString(),
                     title = "Undid Pick #$targetOverall (${undoneHumanPick.playerName})",
                     details = "Refunded ${CadFormatter.formatCompact(undoneHumanPick.pickCostCad)} and rolled back ${picksToRollback.size} pick(s).",
                     cashDeltaCad = undoneHumanPick.pickCostCad,
-                    balanceAfterCad = teamsById[USER_TEAM_ID]?.cashBalanceCad ?: 0L,
+                    balanceAfterCad = teamsById[undoneHumanPick.fantasyTeamId]?.cashBalanceCad ?: 0L,
                     timestampEpochMs = System.currentTimeMillis()
                 )
             )
         }
 
-        return Result.success("Rolled back Pick #$targetOverall (${undoneHumanPick.playerName}). You are back on the clock!")
+        return Result.success("Rolled back Pick #$targetOverall (${undoneHumanPick.playerName}). Back on the clock!")
     }
 
     // --- My Team & Lineup Management ---
@@ -1071,11 +1240,13 @@ class NhlFantasyRepository(
         abbreviation: String,
         emblem: TeamEmblem,
         primaryColorHex: Long,
-        secondaryColorHex: Long
+        secondaryColorHex: Long,
+        actingTeamId: String? = null
     ): Result<Unit> {
+        val teamId = actingTeamId ?: getActiveControlledTeamId()
         val cleanName = teamName.trim().ifBlank { "Northern Ice HC" }.take(28)
         val cleanAbbrev = abbreviation.trim().uppercase().filter { it.isLetterOrDigit() }.ifBlank { "NIC" }.take(3)
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID) ?: return Result.failure(IllegalStateException("Team missing"))
+        val userTeam = dao.getFantasyTeamById(teamId) ?: return Result.failure(IllegalStateException("Team missing"))
         dao.upsertFantasyTeam(
             userTeam.copy(
                 teamName = cleanName,
@@ -1088,8 +1259,9 @@ class NhlFantasyRepository(
         return Result.success(Unit)
     }
 
-    suspend fun applyRecommendedUserLineup(): Result<String> {
-        val roster = dao.getTeamRosterOnce(USER_TEAM_ID)
+    suspend fun applyRecommendedUserLineup(actingTeamId: String? = null): Result<String> {
+        val teamId = actingTeamId ?: getActiveControlledTeamId()
+        val roster = dao.getTeamRosterOnce(teamId)
         if (roster.isEmpty()) {
             return Result.failure(IllegalStateException("Your roster is empty — buy or draft players first."))
         }
@@ -1098,8 +1270,13 @@ class NhlFantasyRepository(
         return Result.success("Optimal starting lineup set across Forward Lines, Defense Pairings, and Goalies!")
     }
 
-    suspend fun assignPlayerToSlot(playerId: Long, targetSlot: LineupSlot): Result<String> {
-        val roster = dao.getTeamRosterOnce(USER_TEAM_ID)
+    suspend fun assignPlayerToSlot(
+        playerId: Long,
+        targetSlot: LineupSlot,
+        actingTeamId: String? = null
+    ): Result<String> {
+        val teamId = actingTeamId ?: getActiveControlledTeamId()
+        val roster = dao.getTeamRosterOnce(teamId)
         val player = roster.firstOrNull { it.playerId == playerId }
             ?: return Result.failure(IllegalArgumentException("Player is not on your roster"))
         val occupant = if (targetSlot != LineupSlot.UNASSIGNED) {
@@ -1123,7 +1300,22 @@ class NhlFantasyRepository(
         )
     }
 
-    // --- Player Trading System ---
+    suspend fun applyRemoteTeamLineupSlots(
+        teamId: String,
+        slots: List<LineupSlotSyncEntry>
+    ): Result<Unit> {
+        val roster = dao.getTeamRosterOnce(teamId)
+        if (roster.isEmpty()) return Result.success(Unit)
+        val slotMap = slots.associate { it.playerId to LineupSlot.fromCode(it.lineupSlotCode).code }
+        val updated = roster.map { p ->
+            val newCode = slotMap[p.playerId]
+            if (newCode != null) p.copy(lineupSlotCode = newCode) else p
+        }
+        dao.updatePlayers(updated)
+        return Result.success(Unit)
+    }
+
+    // --- Player Trading System (CPU GMs & Real Multiplayer Friends) ---
 
     /**
      * Populates CPU teams with balanced free-agent rosters if the user chose Marketplace play without running a Draft,
@@ -1131,12 +1323,13 @@ class NhlFantasyRepository(
      */
     suspend fun ensureCpuTeamsHaveRostersIfNeeded() {
         val allTeams = dao.getFantasyTeamsOnce()
-        val cpuTeams = allTeams.filter { !it.isHuman }
+        val cpuTeams = allTeams.filter { it.isCpuGm }
         if (cpuTeams.isEmpty()) return
 
         val allPlayers = dao.getAllPlayersOnce()
-        val anyCpuHasPlayers = cpuTeams.any { cpu -> allPlayers.count { it.ownerFantasyTeamId == cpu.teamId } >= 10 }
-        if (anyCpuHasPlayers) return
+        val anyTeamDrafted = (dao.getDraftPicksOnce().isNotEmpty()) ||
+            cpuTeams.any { cpu -> allPlayers.count { it.ownerFantasyTeamId == cpu.teamId } >= 6 }
+        if (anyTeamDrafted) return
 
         val settings = settingsFlow.first()
         val config = DraftConfig(
@@ -1145,7 +1338,6 @@ class NhlFantasyRepository(
             salaryCapCad = settings.economyConfig.salaryCapCad
         )
 
-        // Leave top 15 free agents + all watchlisted players in the Marketplace so user still has superstars to buy
         val unowned = allPlayers
             .filter { it.ownerFantasyTeamId == null && !it.isWatchlisted }
             .sortedByDescending { it.overallRating }
@@ -1192,25 +1384,49 @@ class NhlFantasyRepository(
         offeredCashCad: Long,
         requestedPlayerIds: List<Long>,
         requestedCashCad: Long
+    ): Result<TradeEvaluationVerdict> = proposeTradeToTeam(
+        targetTeamId = cpuTeamId,
+        offeredPlayerIds = offeredPlayerIds,
+        offeredCashCad = offeredCashCad,
+        requestedPlayerIds = requestedPlayerIds,
+        requestedCashCad = requestedCashCad
+    )
+
+    /**
+     * Proposes a trade to either a CPU GM (evaluated immediately by AI) OR a real human friend
+     * in a multiplayer league (saved & broadcast as `PENDING` so the friend can Accept or Reject on their device!).
+     */
+    suspend fun proposeTradeToTeam(
+        targetTeamId: String,
+        offeredPlayerIds: List<Long>,
+        offeredCashCad: Long,
+        requestedPlayerIds: List<Long>,
+        requestedCashCad: Long,
+        proposerTeamIdOverride: String? = null
     ): Result<TradeEvaluationVerdict> {
         ensureCpuTeamsHaveRostersIfNeeded()
         val settings = settingsFlow.first()
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User team missing"))
-        val cpuTeam = dao.getFantasyTeamById(cpuTeamId)
-            ?: return Result.failure(IllegalArgumentException("CPU team not found"))
+        val proposerId = proposerTeamIdOverride ?: getActiveControlledTeamId()
+        if (proposerId == targetTeamId) {
+            return Result.failure(IllegalArgumentException("Cannot propose a trade to your own team"))
+        }
 
-        val userRoster = dao.getTeamRosterOnce(USER_TEAM_ID)
-        val cpuRoster = dao.getTeamRosterOnce(cpuTeamId)
+        val proposerTeam = dao.getFantasyTeamById(proposerId)
+            ?: return Result.failure(IllegalStateException("Proposing team missing"))
+        val targetTeam = dao.getFantasyTeamById(targetTeamId)
+            ?: return Result.failure(IllegalArgumentException("Target team not found"))
 
-        val offeredPlayers = userRoster.filter { it.playerId in offeredPlayerIds }
-        val requestedPlayers = cpuRoster.filter { it.playerId in requestedPlayerIds }
+        val proposerRoster = dao.getTeamRosterOnce(proposerId)
+        val targetRoster = dao.getTeamRosterOnce(targetTeamId)
+
+        val offeredPlayers = proposerRoster.filter { it.playerId in offeredPlayerIds }
+        val requestedPlayers = targetRoster.filter { it.playerId in requestedPlayerIds }
 
         val verdict = TradeEvaluationEngine.evaluateTradeForCpu(
-            proposerTeam = userTeam,
-            proposerRoster = userRoster,
-            receiverCpuTeam = cpuTeam,
-            receiverRoster = cpuRoster,
+            proposerTeam = proposerTeam,
+            proposerRoster = proposerRoster,
+            receiverCpuTeam = targetTeam,
+            receiverRoster = targetRoster,
             offeredPlayers = offeredPlayers,
             offeredCashCad = offeredCashCad,
             requestedPlayers = requestedPlayers,
@@ -1224,16 +1440,53 @@ class NhlFantasyRepository(
         }
 
         val now = System.currentTimeMillis()
+        val offeredSummary = offeredPlayers.joinToString(", ") { "${it.fullName} (${it.overallRating})" }.ifBlank { "Cash Only" }
+        val requestedSummary = requestedPlayers.joinToString(", ") { "${it.fullName} (${it.overallRating})" }.ifBlank { "Cash Only" }
+
+        if (!targetTeam.isCpuGm) {
+            val friendLabel = targetTeam.gmDisplayName.ifBlank { targetTeam.teamName }
+            val humanPitch = "${proposerTeam.teamName} offers $offeredSummary" +
+                (if (offeredCashCad > 0) " + ${CadFormatter.formatCompact(offeredCashCad)}" else "") +
+                " for $requestedSummary" +
+                (if (requestedCashCad > 0) " + ${CadFormatter.formatCompact(requestedCashCad)}" else "") +
+                " — Pending response from $friendLabel."
+
+            val pendingProposal = TradeProposalEntity(
+                proposerTeamId = proposerTeam.teamId,
+                proposerTeamName = proposerTeam.teamName,
+                receiverTeamId = targetTeam.teamId,
+                receiverTeamName = targetTeam.teamName,
+                offeredPlayerIdsCsv = offeredPlayers.joinToString(",") { it.playerId.toString() },
+                offeredPlayersSummary = offeredSummary,
+                offeredCashCad = offeredCashCad,
+                requestedPlayerIdsCsv = requestedPlayers.joinToString(",") { it.playerId.toString() },
+                requestedPlayersSummary = requestedSummary,
+                requestedCashCad = requestedCashCad,
+                status = "PENDING",
+                fairnessScore = verdict.fairnessScore,
+                gmEvaluationReason = humanPitch,
+                createdAtEpochMs = now
+            )
+            dao.insertTradeProposal(pendingProposal)
+            return Result.success(
+                verdict.copy(
+                    isRuleValid = true,
+                    acceptedByCpu = false,
+                    gmReasoning = "Live trade offer sent to ${targetTeam.teamName} ($friendLabel)!"
+                )
+            )
+        }
+
         val proposal = TradeProposalEntity(
-            proposerTeamId = USER_TEAM_ID,
-            proposerTeamName = userTeam.teamName,
-            receiverTeamId = cpuTeam.teamId,
-            receiverTeamName = cpuTeam.teamName,
+            proposerTeamId = proposerTeam.teamId,
+            proposerTeamName = proposerTeam.teamName,
+            receiverTeamId = targetTeam.teamId,
+            receiverTeamName = targetTeam.teamName,
             offeredPlayerIdsCsv = offeredPlayers.joinToString(",") { it.playerId.toString() },
-            offeredPlayersSummary = offeredPlayers.joinToString(", ") { "${it.fullName} (${it.overallRating})" }.ifBlank { "Cash Only" },
+            offeredPlayersSummary = offeredSummary,
             offeredCashCad = offeredCashCad,
             requestedPlayerIdsCsv = requestedPlayers.joinToString(",") { it.playerId.toString() },
-            requestedPlayersSummary = requestedPlayers.joinToString(", ") { "${it.fullName} (${it.overallRating})" }.ifBlank { "Cash Only" },
+            requestedPlayersSummary = requestedSummary,
             requestedCashCad = requestedCashCad,
             status = if (verdict.acceptedByCpu) "ACCEPTED" else "REJECTED",
             fairnessScore = verdict.fairnessScore,
@@ -1245,12 +1498,12 @@ class NhlFantasyRepository(
         if (verdict.acceptedByCpu) {
             executeAcceptedTradeAtomically(
                 proposal = proposal,
-                teamA = userTeam,
-                teamARoster = userRoster,
+                teamA = proposerTeam,
+                teamARoster = proposerRoster,
                 teamAOutgoing = offeredPlayers,
                 teamACashOut = offeredCashCad,
-                teamB = cpuTeam,
-                teamBRoster = cpuRoster,
+                teamB = targetTeam,
+                teamBRoster = targetRoster,
                 teamBOutgoing = requestedPlayers,
                 teamBCashOut = requestedCashCad
             )
@@ -1264,12 +1517,16 @@ class NhlFantasyRepository(
     suspend fun solicitIncomingCpuOffer(): Result<TradeProposalEntity> {
         ensureCpuTeamsHaveRostersIfNeeded()
         val settings = settingsFlow.first()
+        val controlledId = getActiveControlledTeamId()
         val allTeams = dao.getFantasyTeamsOnce()
-        val userTeam = allTeams.firstOrNull { it.isHuman }
+        val userTeam = allTeams.firstOrNull { it.teamId == controlledId }
             ?: return Result.failure(IllegalStateException("User team missing"))
-        val cpuTeams = allTeams.filter { !it.isHuman }
+        val cpuTeams = allTeams.filter { it.isCpuGm }
+        if (cpuTeams.isEmpty()) {
+            return Result.failure(IllegalStateException("This league has only human GMs — propose a trade directly to a friend!"))
+        }
         val allPlayers = dao.getAllPlayersOnce()
-        val userRoster = allPlayers.filter { it.ownerFantasyTeamId == USER_TEAM_ID }
+        val userRoster = allPlayers.filter { it.ownerFantasyTeamId == controlledId }
         if (userRoster.size < 3) {
             return Result.failure(IllegalStateException("Acquire at least 3 players on your roster to solicit CPU trade offers."))
         }
@@ -1289,7 +1546,7 @@ class NhlFantasyRepository(
         val entity = TradeProposalEntity(
             proposerTeamId = generated.cpuTeam.teamId,
             proposerTeamName = generated.cpuTeam.teamName,
-            receiverTeamId = USER_TEAM_ID,
+            receiverTeamId = controlledId,
             receiverTeamName = userTeam.teamName,
             offeredPlayerIdsCsv = generated.cpuOfferedPlayers.joinToString(",") { it.playerId.toString() },
             offeredPlayersSummary = generated.cpuOfferedPlayers.joinToString(", ") { "${it.fullName} (${it.overallRating} OVR)" },
@@ -1306,67 +1563,88 @@ class NhlFantasyRepository(
         return Result.success(entity.copy(tradeId = id))
     }
 
-    suspend fun respondToIncomingProposal(tradeId: Long, accept: Boolean): Result<String> {
+    suspend fun respondToIncomingProposal(
+        tradeId: Long,
+        accept: Boolean,
+        responderTeamIdOverride: String? = null
+    ): Result<String> {
         val proposal = dao.getTradeProposalById(tradeId)
             ?: return Result.failure(IllegalArgumentException("Trade proposal not found"))
         if (proposal.status != "PENDING") {
             return Result.failure(IllegalStateException("This proposal was already ${proposal.status.lowercase()}."))
         }
 
+        val expectedResponderId = responderTeamIdOverride ?: getActiveControlledTeamId()
+        val receiverTeam = dao.getFantasyTeamById(proposal.receiverTeamId)
+            ?: return Result.failure(IllegalStateException("Receiving team no longer exists"))
+        val canRespond = proposal.receiverTeamId == expectedResponderId ||
+            (receiverTeam.isLocalPassAndPlayGm && expectedResponderId == USER_TEAM_ID)
+        if (!canRespond) {
+            return Result.failure(IllegalStateException("Only ${receiverTeam.teamName} can respond to this trade offer."))
+        }
+
         val now = System.currentTimeMillis()
         if (!accept) {
-            dao.updateTradeProposal(proposal.copy(status = "REJECTED", resolvedAtEpochMs = now))
+            dao.updateTradeProposal(
+                proposal.copy(
+                    status = "REJECTED",
+                    gmEvaluationReason = "Declined by ${receiverTeam.teamName}.",
+                    resolvedAtEpochMs = now
+                )
+            )
             return Result.success("Declined trade offer from ${proposal.proposerTeamName}.")
         }
 
         val settings = settingsFlow.first()
-        val cpuTeam = dao.getFantasyTeamById(proposal.proposerTeamId)
-            ?: return Result.failure(IllegalStateException("Proposing CPU team no longer exists"))
-        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
-            ?: return Result.failure(IllegalStateException("User team missing"))
+        val proposerTeam = dao.getFantasyTeamById(proposal.proposerTeamId)
+            ?: return Result.failure(IllegalStateException("Proposing team no longer exists"))
 
-        val cpuRoster = dao.getTeamRosterOnce(cpuTeam.teamId)
-        val userRoster = dao.getTeamRosterOnce(USER_TEAM_ID)
+        val proposerRoster = dao.getTeamRosterOnce(proposerTeam.teamId)
+        val receiverRoster = dao.getTeamRosterOnce(receiverTeam.teamId)
 
-        val cpuOfferedIds = proposal.offeredPlayerIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-        val userReqIds = proposal.requestedPlayerIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
+        val offeredIds = proposal.offeredPlayerIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
+        val reqIds = proposal.requestedPlayerIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
 
-        val cpuOutgoing = cpuRoster.filter { it.playerId in cpuOfferedIds }
-        val userOutgoing = userRoster.filter { it.playerId in userReqIds }
+        val proposerOutgoing = proposerRoster.filter { it.playerId in offeredIds }
+        val receiverOutgoing = receiverRoster.filter { it.playerId in reqIds }
 
-        if (cpuOutgoing.size != cpuOfferedIds.size || userOutgoing.size != userReqIds.size) {
+        if (proposerOutgoing.size != offeredIds.size || receiverOutgoing.size != reqIds.size) {
             dao.updateTradeProposal(proposal.copy(status = "REJECTED", gmEvaluationReason = "Voided: involved players changed ownership.", resolvedAtEpochMs = now))
             return Result.failure(IllegalStateException("One or more players in this proposal are no longer owned by their original team."))
         }
 
-        // Re-verify cash and cap compliance before executing
-        val userCashAfter = userTeam.cashBalanceCad + proposal.offeredCashCad - proposal.requestedCashCad
-        val cpuCashAfter = cpuTeam.cashBalanceCad - proposal.offeredCashCad + proposal.requestedCashCad
-        if (userCashAfter < 0L || cpuCashAfter < 0L) {
+        val receiverCashAfter = receiverTeam.cashBalanceCad + proposal.offeredCashCad - proposal.requestedCashCad
+        val proposerCashAfter = proposerTeam.cashBalanceCad - proposal.offeredCashCad + proposal.requestedCashCad
+        if (receiverCashAfter < 0L || proposerCashAfter < 0L) {
             return Result.failure(IllegalStateException("Trade cannot complete: insufficient virtual CAD balance."))
         }
 
         if (settings.economyConfig.enforceSalaryCap) {
-            val userCapAfter = userRoster.sumOf { it.capHitCad } - userOutgoing.sumOf { it.capHitCad } + cpuOutgoing.sumOf { it.capHitCad }
-            if (userCapAfter > settings.economyConfig.salaryCapCad) {
-                return Result.failure(IllegalStateException("Accepting this trade would exceed your Salary Cap."))
+            val receiverCapAfter = receiverRoster.sumOf { it.capHitCad } - receiverOutgoing.sumOf { it.capHitCad } + proposerOutgoing.sumOf { it.capHitCad }
+            val proposerCapAfter = proposerRoster.sumOf { it.capHitCad } - proposerOutgoing.sumOf { it.capHitCad } + receiverOutgoing.sumOf { it.capHitCad }
+            if (receiverCapAfter > settings.economyConfig.salaryCapCad || proposerCapAfter > settings.economyConfig.salaryCapCad) {
+                return Result.failure(IllegalStateException("Accepting this trade would exceed the Salary Cap."))
             }
         }
 
         executeAcceptedTradeAtomically(
-            proposal = proposal.copy(status = "ACCEPTED", resolvedAtEpochMs = now),
-            teamA = cpuTeam,
-            teamARoster = cpuRoster,
-            teamAOutgoing = cpuOutgoing,
+            proposal = proposal.copy(
+                status = "ACCEPTED",
+                gmEvaluationReason = "Accepted by ${receiverTeam.teamName}! Trade completed.",
+                resolvedAtEpochMs = now
+            ),
+            teamA = proposerTeam,
+            teamARoster = proposerRoster,
+            teamAOutgoing = proposerOutgoing,
             teamACashOut = proposal.offeredCashCad,
-            teamB = userTeam,
-            teamBRoster = userRoster,
-            teamBOutgoing = userOutgoing,
+            teamB = receiverTeam,
+            teamBRoster = receiverRoster,
+            teamBOutgoing = receiverOutgoing,
             teamBCashOut = proposal.requestedCashCad,
             isExistingProposal = true
         )
 
-        return Result.success("Trade completed with ${cpuTeam.teamName}!")
+        return Result.success("Trade completed between ${proposerTeam.teamName} and ${receiverTeam.teamName}!")
     }
 
     private suspend fun executeAcceptedTradeAtomically(
@@ -1395,12 +1673,6 @@ class NhlFantasyRepository(
                 teamAOutgoing.map { it.copy(ownerFantasyTeamId = teamB.teamId, acquisitionPriceCad = it.purchasePriceCad) }
         )
 
-        val userNetCash = if (teamA.isHuman) (teamBCashOut - teamACashOut) else (teamACashOut - teamBCashOut)
-        val userBalanceAfter = if (teamA.isHuman) teamANewCash else teamBNewCash
-        val cpuCounterparty = if (teamA.isHuman) teamB.teamName else teamA.teamName
-        val acquiredByUser = if (teamA.isHuman) teamBOutgoing else teamAOutgoing
-        val sentByUser = if (teamA.isHuman) teamAOutgoing else teamBOutgoing
-
         database.withTransaction {
             dao.upsertFantasyTeams(
                 listOf(
@@ -1414,19 +1686,36 @@ class NhlFantasyRepository(
             } else {
                 dao.insertTradeProposal(proposal)
             }
-            dao.insertTransaction(
-                TransactionEntity(
-                    type = "TRADE",
-                    teamId = USER_TEAM_ID,
-                    counterpartyLabel = cpuCounterparty,
-                    playerIdsCsv = (acquiredByUser + sentByUser).joinToString(",") { it.playerId.toString() },
-                    title = "Trade with $cpuCounterparty",
-                    details = "Acquired: ${acquiredByUser.joinToString { it.lastName }.ifBlank { "Cash" }} • Sent: ${sentByUser.joinToString { it.lastName }.ifBlank { "Cash" }}",
-                    cashDeltaCad = userNetCash,
-                    balanceAfterCad = userBalanceAfter,
-                    timestampEpochMs = now
+            if (teamA.isHuman) {
+                dao.insertTransaction(
+                    TransactionEntity(
+                        type = "TRADE",
+                        teamId = teamA.teamId,
+                        counterpartyLabel = teamB.teamName,
+                        playerIdsCsv = (teamBOutgoing + teamAOutgoing).joinToString(",") { it.playerId.toString() },
+                        title = "Trade with ${teamB.teamName}",
+                        details = "Acquired: ${teamBOutgoing.joinToString { it.lastName }.ifBlank { "Cash" }} • Sent: ${teamAOutgoing.joinToString { it.lastName }.ifBlank { "Cash" }}",
+                        cashDeltaCad = teamBCashOut - teamACashOut,
+                        balanceAfterCad = teamANewCash,
+                        timestampEpochMs = now
+                    )
                 )
-            )
+            }
+            if (teamB.isHuman) {
+                dao.insertTransaction(
+                    TransactionEntity(
+                        type = "TRADE",
+                        teamId = teamB.teamId,
+                        counterpartyLabel = teamA.teamName,
+                        playerIdsCsv = (teamAOutgoing + teamBOutgoing).joinToString(",") { it.playerId.toString() },
+                        title = "Trade with ${teamA.teamName}",
+                        details = "Acquired: ${teamAOutgoing.joinToString { it.lastName }.ifBlank { "Cash" }} • Sent: ${teamBOutgoing.joinToString { it.lastName }.ifBlank { "Cash" }}",
+                        cashDeltaCad = teamACashOut - teamBCashOut,
+                        balanceAfterCad = teamBNewCash,
+                        timestampEpochMs = now
+                    )
+                )
+            }
         }
     }
 
@@ -1435,6 +1724,7 @@ class NhlFantasyRepository(
     suspend fun simulateNextSeasonWeek(): Result<String> {
         ensureCpuTeamsHaveRostersIfNeeded()
         val settings = settingsFlow.first()
+        val controlledId = settings.controlledTeamId.ifBlank { USER_TEAM_ID }
         val syncStatus = dao.getSyncStatusOnce()
         val matchups = dao.getMatchupsOnce()
         val nextWeek = matchups.filter { !it.isCompleted }.minOfOrNull { it.weekNumber }
@@ -1452,6 +1742,7 @@ class NhlFantasyRepository(
 
         val now = System.currentTimeMillis()
         val completedWeekMatchups = mutableListOf<FantasyMatchupEntity>()
+        val humanRewardTransactions = mutableListOf<TransactionEntity>()
         var userVictoryBonusNote = ""
 
         for (m in weekMatchups) {
@@ -1515,20 +1806,38 @@ class NhlFantasyRepository(
                 }
             }
 
-            // Award transparent virtual CAD matchup victory bonus if user won
-            val userWasHome = m.homeTeamId == USER_TEAM_ID
-            val userWasAway = m.awayTeamId == USER_TEAM_ID
-            val userWon = (userWasHome && finalHomeScore > finalAwayScore) || (userWasAway && finalAwayScore > finalHomeScore)
-            if (userWon) {
-                val bonusCad = if (m.stage == "CHAMPIONSHIP_FINAL") 2_500_000L else 250_000L
-                val uTeam = teamsById[USER_TEAM_ID]
-                if (uTeam != null) {
-                    val updatedUser = uTeam.copy(
-                        cashBalanceCad = uTeam.cashBalanceCad + bonusCad,
-                        championshipsWon = uTeam.championshipsWon + if (m.stage == "CHAMPIONSHIP_FINAL") 1 else 0
+            // Award virtual CAD matchup victory bonus to any winning human GM in the league
+            val winnerTeamId = when {
+                finalHomeScore > finalAwayScore -> m.homeTeamId
+                finalAwayScore > finalHomeScore -> m.awayTeamId
+                else -> null
+            }
+            if (winnerTeamId != null) {
+                val winningTeam = teamsById[winnerTeamId]
+                if (winningTeam != null && winningTeam.isHuman) {
+                    val isTitle = m.stage == "CHAMPIONSHIP_FINAL"
+                    val bonusCad = if (isTitle) 2_500_000L else 250_000L
+                    val updatedWinner = winningTeam.copy(
+                        cashBalanceCad = winningTeam.cashBalanceCad + bonusCad,
+                        championshipsWon = winningTeam.championshipsWon + if (isTitle) 1 else 0
                     )
-                    teamsById[USER_TEAM_ID] = updatedUser
-                    userVictoryBonusNote = " (+${CadFormatter.formatCompact(bonusCad)} virtual victory bonus)"
+                    teamsById[winnerTeamId] = updatedWinner
+                    if (winnerTeamId == controlledId) {
+                        userVictoryBonusNote = " (+${CadFormatter.formatCompact(bonusCad)} virtual victory bonus)"
+                    }
+                    humanRewardTransactions.add(
+                        TransactionEntity(
+                            type = "REWARD",
+                            teamId = winnerTeamId,
+                            counterpartyLabel = "Fantasy League Office",
+                            playerIdsCsv = "",
+                            title = if (isTitle) "Fantasy Championship Prize Bonus" else "Week $nextWeek Matchup Victory Bonus",
+                            details = "Virtual CAD performance prize credited to ${updatedWinner.teamName}.",
+                            cashDeltaCad = bonusCad,
+                            balanceAfterCad = updatedWinner.cashBalanceCad,
+                            timestampEpochMs = now
+                        )
+                    )
                 }
             }
         }
@@ -1579,24 +1888,7 @@ class NhlFantasyRepository(
             if (newlyGeneratedBracket.isNotEmpty()) {
                 dao.insertMatchups(newlyGeneratedBracket)
             }
-            if (userVictoryBonusNote.isNotBlank()) {
-                val uTeam = teamsById[USER_TEAM_ID]!!
-                val isTitle = completedWeekMatchups.any { it.stage == "CHAMPIONSHIP_FINAL" }
-                val bonus = if (isTitle) 2_500_000L else 250_000L
-                dao.insertTransaction(
-                    TransactionEntity(
-                        type = "REWARD",
-                        teamId = USER_TEAM_ID,
-                        counterpartyLabel = "Fantasy League Office",
-                        playerIdsCsv = "",
-                        title = if (isTitle) "Fantasy Championship Prize Bonus" else "Week $nextWeek Matchup Victory Bonus",
-                        details = "Virtual CAD performance prize credited to franchise treasury.",
-                        cashDeltaCad = bonus,
-                        balanceAfterCad = uTeam.cashBalanceCad,
-                        timestampEpochMs = now
-                    )
-                )
-            }
+            humanRewardTransactions.forEach { dao.insertTransaction(it) }
             if (seasonArchiveToSave != null) {
                 dao.insertSeasonArchive(seasonArchiveToSave)
             }
@@ -1614,6 +1906,221 @@ class NhlFantasyRepository(
         }
 
         return Result.success(label)
+    }
+
+    // --- Multiplayer Authoritative Snapshot Export & Atomic Import ---
+
+    suspend fun exportMultiplayerRoomSnapshot(
+        roomCode: String,
+        revision: Long,
+        hostClientId: String,
+        hostGmName: String,
+        phase: MultiplayerRoomPhase,
+        fillEmptySlotsWithCpu: Boolean,
+        lobbyDraftConfig: DraftConfig,
+        participants: List<LobbyParticipant>,
+        chatHistory: List<MultiplayerChatMessage>
+    ): MultiplayerRoomSnapshot {
+        val settings = settingsFlow.first()
+        val teams = dao.getFantasyTeamsOnce()
+        val draftSession = dao.getDraftSessionOnce()
+        val draftPicks = dao.getDraftPicksOnce()
+        val ownedPlayers = dao.getAllPlayersOnce()
+            .filter { it.ownerFantasyTeamId != null }
+            .map { p ->
+                SyncedPlayerOwnership(
+                    playerId = p.playerId,
+                    ownerTeamId = p.ownerFantasyTeamId!!,
+                    acquisitionPriceCad = p.acquisitionPriceCad,
+                    lineupSlotCode = p.lineupSlotCode,
+                    fullName = p.fullName,
+                    positionCode = p.positionCode,
+                    nhlTeamAbbrev = p.teamAbbrev,
+                    overallRating = p.overallRating,
+                    purchasePriceCad = p.purchasePriceCad,
+                    sellPriceCad = p.sellPriceCad,
+                    capHitCad = p.capHitCad
+                )
+            }
+        val trades = dao.getTradeProposalsOnce()
+        val matchups = dao.getMatchupsOnce()
+
+        val activeConfig = if (phase != MultiplayerRoomPhase.LOBBY && draftSession != null) {
+            decodeDraftConfig(draftSession)
+        } else {
+            lobbyDraftConfig
+        }
+
+        return MultiplayerRoomSnapshot(
+            roomCode = roomCode,
+            revision = revision,
+            hostClientId = hostClientId,
+            hostGmName = hostGmName,
+            phase = phase,
+            fillEmptySlotsWithCpu = fillEmptySlotsWithCpu,
+            draftConfig = activeConfig,
+            economyConfig = settings.economyConfig,
+            scoringWeights = settings.scoringWeights,
+            currentSeasonNumber = settings.currentSeasonNumber,
+            participants = participants,
+            orderedSlotTeamIds = participants.map { it.assignedTeamId },
+            teams = teams.map { SyncedFantasyTeam.fromEntity(it) },
+            draftSession = draftSession?.let { SyncedDraftSession.fromEntity(it) },
+            draftPicks = draftPicks.map { SyncedDraftPick.fromEntity(it) },
+            ownedPlayers = ownedPlayers,
+            tradeProposals = trades.map { SyncedTradeProposal.fromEntity(it) },
+            matchups = matchups.map { SyncedMatchup.fromEntity(it) },
+            chatHistory = chatHistory.takeLast(60),
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
+    }
+
+    /**
+     * Atomically applies an authoritative MultiplayerRoomSnapshot on a Guest device.
+     */
+    suspend fun applyMultiplayerRoomSnapshot(
+        snapshot: MultiplayerRoomSnapshot,
+        localControlledTeamId: String
+    ) {
+        settingsStore.updateEconomyConfig(snapshot.economyConfig)
+        settingsStore.updateScoringWeights(snapshot.scoringWeights)
+        settingsStore.setSeasonNumber(snapshot.currentSeasonNumber)
+        settingsStore.updateMultiplayerSessionState(
+            roomCode = snapshot.roomCode,
+            role = RoomRole.GUEST.name,
+            controlledTeamId = localControlledTeamId
+        )
+
+        if (snapshot.phase == MultiplayerRoomPhase.LOBBY) {
+            return
+        }
+
+        val existingPlayersById = dao.getAllPlayersOnce().associateBy { it.playerId }
+        val playersToUpsert = mutableListOf<PlayerEntity>()
+        val playersToUpdate = mutableListOf<PlayerEntity>()
+
+        for (owned in snapshot.ownedPlayers) {
+            val local = existingPlayersById[owned.playerId]
+            if (local != null) {
+                playersToUpdate.add(
+                    local.copy(
+                        ownerFantasyTeamId = owned.ownerTeamId,
+                        acquisitionPriceCad = owned.acquisitionPriceCad,
+                        lineupSlotCode = owned.lineupSlotCode
+                    )
+                )
+            } else {
+                val nameParts = owned.fullName.ifBlank { "NHL Player #${owned.playerId}" }.split(" ", limit = 2)
+                val first = nameParts.firstOrNull().orEmpty()
+                val last = nameParts.getOrNull(1).orEmpty()
+                playersToUpsert.add(
+                    PlayerEntity(
+                        playerId = owned.playerId,
+                        firstName = first,
+                        lastName = last,
+                        fullName = owned.fullName.ifBlank { "NHL Player #${owned.playerId}" },
+                        normalizedSearchName = TextNormalizer.normalizeForMatch(owned.fullName),
+                        teamAbbrev = owned.nhlTeamAbbrev,
+                        teamFullName = owned.nhlTeamAbbrev,
+                        positionCode = owned.positionCode,
+                        sweaterNumber = 0,
+                        age = 25,
+                        birthDate = "",
+                        birthCountry = "CAN",
+                        shootsCatches = "L",
+                        heightInches = 73,
+                        weightPounds = 198,
+                        headshotUrl = "https://assets.nhle.com/mugs/nhl/20252026/${owned.nhlTeamAbbrev}/${owned.playerId}.png",
+                        isProspect = false,
+                        isRookie = false,
+                        seasonId = 20252026L,
+                        gamesPlayed = 0,
+                        goals = 0,
+                        assists = 0,
+                        points = 0,
+                        plusMinus = 0,
+                        penaltyMinutes = 0,
+                        powerPlayGoals = 0,
+                        powerPlayPoints = 0,
+                        shorthandedPoints = 0,
+                        shots = 0,
+                        hits = 0,
+                        blockedShots = 0,
+                        avgToiSeconds = 0,
+                        faceoffWinPct = 0.0,
+                        gamesStarted = 0,
+                        wins = 0,
+                        losses = 0,
+                        otLosses = 0,
+                        saves = 0,
+                        shotsAgainst = 0,
+                        goalsAgainst = 0,
+                        savePct = 0.0,
+                        goalsAgainstAverage = 0.0,
+                        shutouts = 0,
+                        prevSeasonId = 20242025L,
+                        prevGamesPlayed = 0,
+                        prevGoals = 0,
+                        prevAssists = 0,
+                        prevPoints = 0,
+                        prevPpPoints = 0,
+                        prevShots = 0,
+                        prevHits = 0,
+                        prevBlockedShots = 0,
+                        prevWins = 0,
+                        prevSaves = 0,
+                        prevSavePct = 0.0,
+                        prevGaa = 0.0,
+                        prevShutouts = 0,
+                        overallRating = owned.overallRating,
+                        purchasePriceCad = owned.purchasePriceCad,
+                        sellPriceCad = owned.sellPriceCad,
+                        capHitCad = owned.capHitCad,
+                        ownerFantasyTeamId = owned.ownerTeamId,
+                        acquisitionPriceCad = owned.acquisitionPriceCad,
+                        lineupSlotCode = owned.lineupSlotCode
+                    )
+                )
+            }
+        }
+
+        database.withTransaction {
+            dao.releaseAllPlayerOwnership()
+            if (snapshot.teams.isNotEmpty()) {
+                dao.deleteAllFantasyTeams()
+                dao.upsertFantasyTeams(snapshot.teams.map { it.toEntity() })
+            }
+            if (playersToUpdate.isNotEmpty()) {
+                dao.updatePlayers(playersToUpdate)
+            }
+            if (playersToUpsert.isNotEmpty()) {
+                dao.upsertPlayers(playersToUpsert)
+            }
+            snapshot.draftSession?.let { dao.upsertDraftSession(it.toEntity()) }
+            dao.clearDraftPicks()
+            snapshot.draftPicks.forEach { dao.insertDraftPick(it.toEntity()) }
+            dao.clearTradeProposals()
+            snapshot.tradeProposals.forEach { dao.insertTradeProposal(it.toEntity()) }
+            dao.clearMatchups()
+            if (snapshot.matchups.isNotEmpty()) {
+                dao.insertMatchups(snapshot.matchups.map { it.toEntity() })
+            }
+        }
+    }
+
+    suspend fun leaveMultiplayerAndRestoreSoloIfNeeded() {
+        settingsStore.updateMultiplayerSessionState(
+            roomCode = "",
+            role = RoomRole.NONE.name,
+            controlledTeamId = USER_TEAM_ID
+        )
+        val userTeam = dao.getFantasyTeamById(USER_TEAM_ID)
+        if (userTeam == null) {
+            dao.deleteAllFantasyTeams()
+            ensureFranchiseInitialized()
+        } else if (userTeam.ownerType != "HUMAN_GM") {
+            dao.upsertFantasyTeam(userTeam.copy(isHuman = true, ownerType = "HUMAN_GM"))
+        }
     }
 
     suspend fun startNextFantasySeason(): Result<String> {

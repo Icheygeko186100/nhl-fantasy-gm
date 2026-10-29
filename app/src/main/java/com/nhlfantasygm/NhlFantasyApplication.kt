@@ -11,6 +11,7 @@ import com.nhlfantasygm.data.local.SecureCredentialStore
 import com.nhlfantasygm.data.local.SettingsDataStore
 import com.nhlfantasygm.data.remote.NhlRemoteDataSource
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
+import com.nhlfantasygm.multiplayer.MultiplayerCoordinator
 import com.nhlfantasygm.worker.NhlDataSyncWorker
 
 class NhlFantasyApplication : Application(), ImageLoaderFactory {
@@ -19,6 +20,9 @@ class NhlFantasyApplication : Application(), ImageLoaderFactory {
         private set
 
     lateinit var repository: NhlFantasyRepository
+        private set
+
+    lateinit var multiplayerCoordinator: MultiplayerCoordinator
         private set
 
     override fun onCreate() {
@@ -35,6 +39,8 @@ class NhlFantasyApplication : Application(), ImageLoaderFactory {
             settingsStore = settingsStore,
             credentialStore = credentialStore
         )
+
+        multiplayerCoordinator = MultiplayerCoordinator(repository = repository)
 
         runCatching {
             NhlDataSyncWorker.schedulePeriodicSync(this)

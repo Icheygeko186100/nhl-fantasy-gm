@@ -1,5 +1,6 @@
 package com.nhlfantasygm
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +23,7 @@ import com.nhlfantasygm.ui.MainViewModel
 import com.nhlfantasygm.ui.components.ExpensiveTransactionDialog
 import com.nhlfantasygm.ui.screens.*
 import com.nhlfantasygm.ui.theme.NhlFantasyGmTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class BottomNavDestination(val index: Int, val label: String, val icon: ImageVector) {
     HOME(0, "Home", Icons.Default.Dashboard),
@@ -32,15 +34,42 @@ enum class BottomNavDestination(val index: Int, val label: String, val icon: Ima
 }
 
 class MainActivity : ComponentActivity() {
+
+    private val incomingDeepLinkUriFlow = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        intent?.dataString?.takeIf { it.isNotBlank() }?.let {
+            incomingDeepLinkUriFlow.value = it
+        }
+
         val app = application as NhlFantasyApplication
 
         setContent {
-            val vm: MainViewModel = viewModel(factory = MainViewModel.factory(app.repository))
+            val vm: MainViewModel = viewModel(
+                factory = MainViewModel.factory(app.repository, app.multiplayerCoordinator)
+            )
+            val pendingDeepLink by incomingDeepLinkUriFlow.collectAsStateWithLifecycle()
+
+            LaunchedEffect(pendingDeepLink) {
+                val uri = pendingDeepLink
+                if (!uri.isNullOrBlank()) {
+                    vm.handleIncomingInviteDeepLink(uri)
+                    incomingDeepLinkUriFlow.value = null
+                }
+            }
+
             NhlFantasyGmAppRoot(vm)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.dataString?.takeIf { it.isNotBlank() }?.let {
+            incomingDeepLinkUriFlow.value = it
         }
     }
 }
@@ -49,6 +78,8 @@ class MainActivity : ComponentActivity() {
 fun NhlFantasyGmAppRoot(vm: MainViewModel) {
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val humanTeam by vm.humanTeamState.collectAsStateWithLifecycle()
+    val controlledTeamId by vm.controlledTeamIdState.collectAsStateWithLifecycle()
+    val mpState by vm.multiplayerState.collectAsStateWithLifecycle()
     val fantasyTeams by vm.fantasyTeamsState.collectAsStateWithLifecycle()
     val nhlTeams by vm.nhlTeamsState.collectAsStateWithLifecycle()
     val allScoredPlayers by vm.allScoredPlayersState.collectAsStateWithLifecycle()
@@ -79,6 +110,12 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
     LaunchedEffect(vm) {
         vm.snackbarEvents.collect { msg ->
             snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+        }
+    }
+
+    LaunchedEffect(vm) {
+        vm.navigationRequests.collect { tabIdx ->
+            selectedTabIndex = tabIdx
         }
     }
 
@@ -123,6 +160,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         fantasyTeams = fantasyTeams,
                         matchups = matchups,
                         newsHeadlines = newsHeadlines,
+                        mpState = mpState,
                         onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
                         onPlayerClick = { vm.openPlayerDetail(it) },
                         onNavigateMainTab = { selectedTabIndex = it },
@@ -135,6 +173,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         draftPicks = draftPicks,
                         fantasyTeams = fantasyTeams,
                         humanTeam = humanTeam,
+                        controlledTeamId = controlledTeamId,
+                        mpState = mpState,
                         allScoredPlayers = allScoredPlayers,
                         timerRemainingSeconds = draftTimerSec,
                         onStartDraft = { vm.startDraft(it) },
@@ -143,7 +183,26 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         onUndoLastPick = { vm.undoLastDraftPick() },
                         onSimRestOfDraft = { vm.simRemainingDraftToCompletion() },
                         onPlayerClick = { vm.openPlayerDetail(it) },
-                        onGoToMyTeam = { selectedTabIndex = 3 }
+                        onGoToMyTeam = { selectedTabIndex = 3 },
+                        onHostMultiplayerRoom = { gmName, cfg -> vm.hostMultiplayerLobby(gmName, cfg) },
+                        onJoinMultiplayerRoom = { code, gm, team, abbr, emb, pHex, sHex ->
+                            vm.joinMultiplayerLobby(code, gm, team, abbr, emb, pHex, sHex)
+                        },
+                        onBuildMultiplayerShareText = { vm.buildMultiplayerInviteShareText() },
+                        onAddLocalPassAndPlayFriend = { gm, team, abbr, emb, pHex, sHex ->
+                            vm.addLocalPassAndPlayFriendToLobby(gm, team, abbr, emb, pHex, sHex)
+                        },
+                        onRemoveLobbyParticipant = { vm.removeLobbyParticipant(it) },
+                        onMoveLobbyParticipant = { id, up -> vm.moveMultiplayerParticipantOrder(id, up) },
+                        onRandomizeLobbyOrder = { vm.randomizeMultiplayerLobbyOrder() },
+                        onUpdateHostLobbyRules = { cfg, fillCpu -> vm.updateMultiplayerLobbyRules(cfg, fillCpu) },
+                        onUpdateGuestLobbyProfile = { gm, team, abbr, emb, pHex, sHex, ready ->
+                            vm.updateGuestLobbyProfileAndReady(gm, team, abbr, emb, pHex, sHex, ready)
+                        },
+                        onSendMultiplayerChat = { vm.sendMultiplayerChatMessage(it) },
+                        onMarkMultiplayerChatRead = { vm.markMultiplayerChatRead() },
+                        onLaunchMultiplayerDraft = { vm.launchMultiplayerDraftFromLobby() },
+                        onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                     )
                     2 -> MarketplaceScreen(
                         players = filteredMarketPlayers,
@@ -175,6 +234,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         onSelectTab = { vm.setLeagueTab(it) },
                         fantasyTeams = fantasyTeams,
                         humanTeam = humanTeam,
+                        controlledTeamId = controlledTeamId,
+                        mpState = mpState,
                         matchups = matchups,
                         seasonArchives = seasonArchives,
                         tradeProposals = tradeProposals,
@@ -186,8 +247,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         savedOptionalApiKey = vm.getSavedOptionalApiKey(),
                         onSimulateNextWeek = { vm.simulateNextWeek() },
                         onStartNextSeason = { vm.launchNextSeason() },
-                        onProposeTrade = { cpu, off, offC, req, reqC ->
-                            vm.submitTradeProposal(cpu, off, offC, req, reqC)
+                        onProposeTrade = { targetTeamId, off, offC, req, reqC ->
+                            vm.submitTradeProposal(targetTeamId, off, offC, req, reqC)
                         },
                         onSolicitCpuOffer = { vm.solicitCpuTradeOffer() },
                         onRespondToTrade = { id, acc -> vm.respondToTradeOffer(id, acc) },
@@ -197,7 +258,9 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         onSaveEconomy = { cfg, recalc -> vm.saveEconomySettings(cfg, recalc) },
                         onSaveScoring = { vm.saveScoringWeights(it) },
                         onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
-                        onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) }
+                        onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) },
+                        onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
+                        onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                     )
                 }
             }
@@ -218,6 +281,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
         selectedPlayerDetail?.let { detail ->
             PlayerDetailDialog(
                 detail = detail,
+                controlledTeamId = controlledTeamId,
                 onDismiss = { vm.closePlayerDetail() },
                 onBuyClick = { vm.requestBuyPlayer(detail.player) },
                 onSellClick = { vm.requestSellPlayer(detail.player) },

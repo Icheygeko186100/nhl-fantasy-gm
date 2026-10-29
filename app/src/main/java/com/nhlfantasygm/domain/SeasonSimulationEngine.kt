@@ -35,6 +35,8 @@ object SeasonSimulationEngine {
 
     /**
      * Generates a balanced 14-week round-robin regular-season schedule using the standard circle method.
+     * Supports both even (2..16) and odd (3..15) league team counts using a BYE rotation slot so every
+     * real player in a multiplayer league is included in the schedule.
      */
     fun generateRegularSeasonSchedule(
         seasonNumber: Int,
@@ -43,11 +45,23 @@ object SeasonSimulationEngine {
         if (teams.size < 2) return emptyList()
         val working = teams.toMutableList()
         if (working.size % 2 != 0) {
-            // Ensure even count
-            working.removeAt(working.lastIndex)
+            working.add(
+                FantasyTeamEntity(
+                    teamId = "__BYE__",
+                    teamName = "BYE",
+                    abbreviation = "BYE",
+                    emblemId = "MAPLE_SHIELD",
+                    primaryColorHex = 0L,
+                    secondaryColorHex = 0L,
+                    isHuman = false,
+                    ownerType = "BYE",
+                    cashBalanceCad = 0L,
+                    startingBudgetCad = 0L
+                )
+            )
         }
         val n = working.size
-        val rounds = n - 1
+        val rounds = (n - 1).coerceAtLeast(1)
         val matchups = mutableListOf<FantasyMatchupEntity>()
 
         for (week in 1..REGULAR_SEASON_WEEKS) {
@@ -63,6 +77,7 @@ object SeasonSimulationEngine {
             for (pairIdx in 0 until n / 2) {
                 val first = rotated[pairIdx]
                 val second = rotated[n - 1 - pairIdx]
+                if (first.teamId == "__BYE__" || second.teamId == "__BYE__") continue
                 val (home, away) = if (swapHomeAway) second to first else first to second
                 matchups.add(
                     FantasyMatchupEntity(
