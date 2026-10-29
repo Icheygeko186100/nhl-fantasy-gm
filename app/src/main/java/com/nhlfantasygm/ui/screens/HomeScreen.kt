@@ -164,9 +164,8 @@ fun HomeScreen(
                     onNavigateLeagueSubTab(LeagueSectionTab.NHL_STATS)
                     onNavigateMainTab(4)
                 }
-                QuickNavButton("Settings", Icons.Default.Tune) {
-                    onNavigateLeagueSubTab(LeagueSectionTab.SETTINGS)
-                    onNavigateMainTab(4)
+                QuickNavButton("Settings", Icons.Default.Settings) {
+                    onNavigateMainTab(5)
                 }
             }
         }

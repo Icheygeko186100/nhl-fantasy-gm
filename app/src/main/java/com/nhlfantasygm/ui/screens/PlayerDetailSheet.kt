@@ -40,20 +40,40 @@ fun PlayerDetailDialog(
     val isOwnedByUser = p.ownerFantasyTeamId == controlledTeamId
     val isOwnedByCpu = p.ownerFantasyTeamId != null && !isOwnedByUser
 
+    // Read system insets from host window to protect against 3-button navigation bar overlap
+    val hostNavInsets = WindowInsets.navigationBars.asPaddingValues()
+    val hostSystemInsets = WindowInsets.systemBars.asPaddingValues()
+    val hostBottomInset = maxOf(hostNavInsets.calculateBottomPadding(), hostSystemInsets.calculateBottomPadding())
+    val hostTopInset = maxOf(hostSystemInsets.calculateTopPadding(), WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+
+    // Ensure ample clearance above Samsung 3-button nav bar (typically 48dp on Galaxy devices)
+    val safeBottomPadding = maxOf(hostBottomInset, 48.dp) + 16.dp
+    val safeTopPadding = maxOf(hostTopInset, 24.dp) + 8.dp
+
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .padding(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = safeTopPadding,
+                    bottom = safeBottomPadding
+                ),
+            contentAlignment = Alignment.Center
         ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.background,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top Bar
                 Row(
@@ -454,12 +474,14 @@ fun PlayerDetailDialog(
                 // Bottom Action Bar
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 4.dp
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -467,7 +489,9 @@ fun PlayerDetailDialog(
                             isOwnedByUser -> {
                                 Button(
                                     onClick = onSellClick,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 50.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = WarningAmber)
                                 ) {
                                     Icon(Icons.Default.Sell, contentDescription = null)
@@ -481,7 +505,9 @@ fun PlayerDetailDialog(
                             isOwnedByCpu -> {
                                 Button(
                                     onClick = { p.ownerFantasyTeamId?.let(onJumpToTradeWithOwner) },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 50.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue)
                                 ) {
                                     Icon(Icons.Default.SwapHoriz, contentDescription = null)
@@ -492,7 +518,9 @@ fun PlayerDetailDialog(
                             else -> {
                                 Button(
                                     onClick = onBuyClick,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 50.dp)
                                 ) {
                                     Icon(Icons.Default.ShoppingCartCheckout, contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
@@ -508,6 +536,7 @@ fun PlayerDetailDialog(
             }
         }
     }
+}
 }
 
 @Composable

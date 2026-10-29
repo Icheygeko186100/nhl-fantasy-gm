@@ -28,9 +28,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 enum class BottomNavDestination(val index: Int, val label: String, val icon: ImageVector) {
     HOME(0, "Home", Icons.Default.Dashboard),
     DRAFT(1, "Draft", Icons.Default.HowToVote),
-    MARKETPLACE(2, "Marketplace", Icons.Default.Storefront),
+    MARKETPLACE(2, "Market", Icons.Default.Storefront),
     MY_TEAM(3, "My Team", Icons.Default.Groups),
-    LEAGUE(4, "League", Icons.Default.EmojiEvents)
+    LEAGUE(4, "League", Icons.Default.EmojiEvents),
+    SETTINGS(5, "Settings", Icons.Default.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -259,6 +260,22 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                         onSaveScoring = { vm.saveScoringWeights(it) },
                         onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
                         onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) },
+                        onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
+                        onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
+                    )
+                    5 -> SettingsScreen(
+                        settings = settings,
+                        mpState = mpState,
+                        savedApiKey = vm.getSavedOptionalApiKey(),
+                        syncStatus = syncStatus,
+                        freshnessState = freshness,
+                        isSyncing = isSyncing,
+                        onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
+                        onSaveTheme = { vm.setThemeMode(it) },
+                        onSaveEconomy = { cfg, recalc -> vm.saveEconomySettings(cfg, recalc) },
+                        onSaveScoring = { vm.saveScoringWeights(it) },
+                        onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
+                        onSaveApiKey = { vm.saveOptionalApiKey(it) },
                         onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
                         onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                     )
