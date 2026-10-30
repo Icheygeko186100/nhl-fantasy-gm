@@ -16,26 +16,29 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nhlfantasygm.ui.LeagueSectionTab
 import com.nhlfantasygm.ui.MainViewModel
 import com.nhlfantasygm.ui.components.ExpensiveTransactionDialog
 import com.nhlfantasygm.ui.components.OmniPlayerSearchDialog
-import com.nhlfantasygm.ui.components.SleeperTopBar
+import com.nhlfantasygm.ui.components.SleeperLeagueHeader
+import com.nhlfantasygm.ui.components.SleeperLeagueSubTab
+import com.nhlfantasygm.ui.components.SleeperStandardHeader
 import com.nhlfantasygm.ui.screens.*
 import com.nhlfantasygm.ui.theme.NhlFantasyGmTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class BottomNavDestination(val index: Int, val label: String, val icon: ImageVector) {
-    HOME(0, "Home", Icons.Default.Dashboard),
-    MATCHUP(1, "Matchup", Icons.Default.CompareArrows),
-    MY_TEAM(2, "My Team", Icons.Default.Groups),
-    PLAYERS(3, "Players", Icons.Default.Storefront),
-    LEAGUE(4, "League", Icons.Default.EmojiEvents)
+    HOME(0, "Home", Icons.Default.Home),
+    FANTASY(1, "Fantasy", Icons.Default.Shield),
+    SCORES(2, "Scores", Icons.Default.Scoreboard),
+    PROFILE(3, "Profile", Icons.Default.Person)
 }
 
 class MainActivity : ComponentActivity() {
@@ -109,12 +112,23 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
     val pendingConfirm by vm.pendingConfirmation.collectAsStateWithLifecycle()
     val selectedPlayerDetail by vm.selectedPlayerDetail.collectAsStateWithLifecycle()
 
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    // Default directly to Sleeper's FANTASY hub on MATCH tab (matching user's reference screenshot)
+    var selectedBottomNav by rememberSaveable { mutableStateOf(BottomNavDestination.FANTASY) }
+    var activeLeagueSubTab by rememberSaveable { mutableStateOf(SleeperLeagueSubTab.MATCH) }
+    var activeOverlay by rememberSaveable { mutableStateOf<String?>(null) }
     var showOmniSearch by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    BackHandler(enabled = selectedTabIndex in listOf(5, 6)) {
-        selectedTabIndex = 0
+    // Smart Back Handler
+    BackHandler(enabled = activeOverlay != null || selectedBottomNav != BottomNavDestination.FANTASY || activeLeagueSubTab != SleeperLeagueSubTab.MATCH) {
+        if (activeOverlay != null) {
+            activeOverlay = null
+        } else if (selectedBottomNav == BottomNavDestination.FANTASY && activeLeagueSubTab != SleeperLeagueSubTab.MATCH) {
+            activeLeagueSubTab = SleeperLeagueSubTab.MATCH
+        } else {
+            selectedBottomNav = BottomNavDestination.FANTASY
+            activeLeagueSubTab = SleeperLeagueSubTab.MATCH
+        }
     }
 
     LaunchedEffect(vm) {
@@ -125,7 +139,34 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
 
     LaunchedEffect(vm) {
         vm.navigationRequests.collect { tabIdx ->
-            selectedTabIndex = tabIdx
+            when (tabIdx) {
+                0 -> {
+                    activeOverlay = null
+                    selectedBottomNav = BottomNavDestination.HOME
+                }
+                1 -> {
+                    activeOverlay = null
+                    selectedBottomNav = BottomNavDestination.FANTASY
+                    activeLeagueSubTab = SleeperLeagueSubTab.MATCH
+                }
+                2 -> {
+                    activeOverlay = null
+                    selectedBottomNav = BottomNavDestination.FANTASY
+                    activeLeagueSubTab = SleeperLeagueSubTab.TEAM
+                }
+                3 -> {
+                    activeOverlay = null
+                    selectedBottomNav = BottomNavDestination.FANTASY
+                    activeLeagueSubTab = SleeperLeagueSubTab.PLAYERS
+                }
+                4 -> {
+                    activeOverlay = null
+                    selectedBottomNav = BottomNavDestination.FANTASY
+                    activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
+                }
+                5 -> activeOverlay = "DRAFT"
+                6 -> activeOverlay = "SETTINGS"
+            }
         }
     }
 
@@ -134,35 +175,134 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
             modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
-                if (selectedTabIndex !in listOf(5, 6)) {
-                    SleeperTopBar(
-                        team = humanTeam,
-                        financials = financials,
-                        mpState = mpState,
-                        freshnessState = freshness,
-                        isDraftActive = draftSession?.status == "IN_PROGRESS",
-                        onOpenSearch = { showOmniSearch = true },
-                        onOpenDraft = { selectedTabIndex = 5 },
-                        onOpenSettings = { selectedTabIndex = 6 },
-                        onTeamClick = { selectedTabIndex = 2 }
-                    )
+                when (activeOverlay) {
+                    "DRAFT" -> {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding(),
+                            color = Color(0xFF0D1424),
+                            border = BorderStroke(1.dp, Color(0xFF1E293B))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { activeOverlay = null }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                                }
+                                Text(
+                                    text = "Draft Room & Multiplayer Lobby",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                    "SETTINGS" -> {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding(),
+                            color = Color(0xFF0D1424),
+                            border = BorderStroke(1.dp, Color(0xFF1E293B))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { activeOverlay = null }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                                }
+                                Text(
+                                    text = "League Settings & Rules",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        when (selectedBottomNav) {
+                            BottomNavDestination.FANTASY -> {
+                                SleeperLeagueHeader(
+                                    leagueTitle = "${humanTeam?.teamName ?: "Northern Ice"} League",
+                                    team = humanTeam,
+                                    activeSubTab = activeLeagueSubTab,
+                                    onSelectSubTab = { activeLeagueSubTab = it },
+                                    onOpenSettings = { activeOverlay = "SETTINGS" },
+                                    onBackClick = { selectedBottomNav = BottomNavDestination.HOME }
+                                )
+                            }
+                            BottomNavDestination.HOME -> {
+                                SleeperStandardHeader(
+                                    title = "NHL Fantasy GM",
+                                    subtitle = "${humanTeam?.teamName ?: "My Franchise"} • ${humanTeam?.wins ?: 0}W - ${humanTeam?.losses ?: 0}L",
+                                    team = humanTeam,
+                                    onOpenSettings = { activeOverlay = "SETTINGS" }
+                                )
+                            }
+                            BottomNavDestination.SCORES -> {
+                                SleeperStandardHeader(
+                                    title = "NHL Live Scores",
+                                    subtitle = "Real-time NHL game stats & standings",
+                                    team = null,
+                                    onOpenSettings = { activeOverlay = "SETTINGS" }
+                                )
+                            }
+                            BottomNavDestination.PROFILE -> {
+                                SleeperStandardHeader(
+                                    title = "GM Franchise Profile",
+                                    subtitle = humanTeam?.teamName ?: "Manager",
+                                    team = humanTeam,
+                                    onOpenSettings = { activeOverlay = "SETTINGS" }
+                                )
+                            }
+                        }
+                    }
                 }
             },
             bottomBar = {
-                NavigationBar {
-                    BottomNavDestination.entries.forEach { dest ->
-                        val selected = selectedTabIndex == dest.index
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { selectedTabIndex = dest.index },
-                            icon = { Icon(dest.icon, contentDescription = dest.label) },
-                            label = {
-                                Text(
-                                    text = dest.label,
-                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
+                if (activeOverlay == null) {
+                    NavigationBar(
+                        containerColor = Color(0xFF0D1424),
+                        tonalElevation = 6.dp
+                    ) {
+                        BottomNavDestination.entries.forEach { dest ->
+                            val selected = selectedBottomNav == dest
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { selectedBottomNav = dest },
+                                icon = {
+                                    Icon(
+                                        imageVector = dest.icon,
+                                        contentDescription = dest.label
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = dest.label.uppercase(),
+                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF00E5FF),
+                                    selectedTextColor = Color.White,
+                                    indicatorColor = Color(0xFF1E293B),
+                                    unselectedIconColor = Color(0xFF7E8B9F),
+                                    unselectedTextColor = Color(0xFF7E8B9F)
                                 )
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -172,119 +312,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                when (selectedTabIndex) {
-                    0 -> HomeScreen(
-                        humanTeam = humanTeam,
-                        financialSummary = financials,
-                        rosterAnalytics = rosterAnalytics,
-                        freshnessState = freshness,
-                        syncStatus = syncStatus,
-                        isSyncing = isSyncing,
-                        liveGames = liveGames,
-                        allScoredPlayers = allScoredPlayers,
-                        fantasyTeams = fantasyTeams,
-                        matchups = matchups,
-                        newsHeadlines = newsHeadlines,
-                        mpState = mpState,
-                        onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
-                        onPlayerClick = { vm.openPlayerDetail(it) },
-                        onNavigateMainTab = { selectedTabIndex = it },
-                        onNavigateLeagueSubTab = { vm.setLeagueTab(it) },
-                        onSimulateNextWeek = { vm.simulateNextWeek() }
-                    )
-                    1 -> MatchupScreen(
-                        matchups = matchups,
-                        fantasyTeams = fantasyTeams,
-                        humanTeam = humanTeam,
-                        controlledTeamId = controlledTeamId,
-                        allScoredPlayers = allScoredPlayers,
-                        seasonNumber = settings.currentSeasonNumber,
-                        mpState = mpState,
-                        onPlayerClick = { vm.openPlayerDetail(it) },
-                        onSimulateNextWeek = { vm.simulateNextWeek() },
-                        onStartNextSeason = { vm.launchNextSeason() },
-                        onGoToTeam = { selectedTabIndex = 2 }
-                    )
-                    2 -> MyTeamScreen(
-                        humanTeam = humanTeam,
-                        rosterScored = userRosterScored,
-                        analytics = rosterAnalytics,
-                        financials = financials,
-                        transactions = transactions,
-                        onPlayerClick = { vm.openPlayerDetail(it) },
-                        onSellPlayer = { vm.requestSellPlayer(it) },
-                        onAutoSetLineup = { vm.autoSetOptimalLineup() },
-                        onAssignSlot = { pid, slot -> vm.assignLineupSlot(pid, slot) },
-                        onSaveBranding = { n, a, e, p, s -> vm.saveFranchiseCustomization(n, a, e, p, s) },
-                        onGoToMarketplace = { selectedTabIndex = 3 }
-                    )
-                    3 -> MarketplaceScreen(
-                        players = filteredMarketPlayers,
-                        nhlTeams = nhlTeams,
-                        humanTeam = humanTeam,
-                        filterState = marketFilter,
-                        isSyncing = isSyncing,
-                        onUpdateFilter = { vm.updateMarketFilter(it) },
-                        onPlayerClick = { vm.openPlayerDetail(it) },
-                        onBuyClick = { vm.requestBuyPlayer(it) },
-                        onSellClick = { vm.requestSellPlayer(it) },
-                        onWatchlistToggle = { vm.toggleWatchlist(it) }
-                    )
-                    4 -> LeagueScreen(
-                        activeTab = leagueTab,
-                        onSelectTab = { vm.setLeagueTab(it) },
-                        fantasyTeams = fantasyTeams,
-                        humanTeam = humanTeam,
-                        controlledTeamId = controlledTeamId,
-                        mpState = mpState,
-                        matchups = matchups,
-                        seasonArchives = seasonArchives,
-                        tradeProposals = tradeProposals,
-                        allScoredPlayers = allScoredPlayers,
-                        nhlTeams = nhlTeams,
-                        liveGames = liveGames,
-                        settings = settings,
-                        isSyncing = isSyncing,
-                        savedOptionalApiKey = vm.getSavedOptionalApiKey(),
-                        onSimulateNextWeek = { vm.simulateNextWeek() },
-                        onStartNextSeason = { vm.launchNextSeason() },
-                        onProposeTrade = { targetTeamId, off, offC, req, reqC ->
-                            vm.submitTradeProposal(targetTeamId, off, offC, req, reqC)
-                        },
-                        onSolicitCpuOffer = { vm.solicitCpuTradeOffer() },
-                        onRespondToTrade = { id, acc -> vm.respondToTradeOffer(id, acc) },
-                        onRefreshLiveScores = { vm.refreshLiveScores() },
-                        onPlayerClick = { vm.openPlayerDetail(it) },
-                        onSaveTheme = { vm.setThemeMode(it) },
-                        onSaveEconomy = { cfg, recalc -> vm.saveEconomySettings(cfg, recalc) },
-                        onSaveScoring = { vm.saveScoringWeights(it) },
-                        onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
-                        onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) },
-                        onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
-                        onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
-                    )
-                    5 -> Column(modifier = Modifier.fillMaxSize()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth(),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { selectedTabIndex = 0 }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                }
-                                Text(
-                                    text = "Draft Room & Multiplayer Lobby",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                when {
+                    activeOverlay == "DRAFT" -> {
                         DraftScreen(
                             draftSession = draftSession,
                             draftConfig = vm.repository.decodeDraftConfig(draftSession),
@@ -301,7 +330,11 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                             onUndoLastPick = { vm.undoLastDraftPick() },
                             onSimRestOfDraft = { vm.simRemainingDraftToCompletion() },
                             onPlayerClick = { vm.openPlayerDetail(it) },
-                            onGoToMyTeam = { selectedTabIndex = 2 },
+                            onGoToMyTeam = {
+                                activeOverlay = null
+                                selectedBottomNav = BottomNavDestination.FANTASY
+                                activeLeagueSubTab = SleeperLeagueSubTab.TEAM
+                            },
                             onHostMultiplayerRoom = { gmName, cfg -> vm.hostMultiplayerLobby(gmName, cfg) },
                             onJoinMultiplayerRoom = { code, gm, team, abbr, emb, pHex, sHex ->
                                 vm.joinMultiplayerLobby(code, gm, team, abbr, emb, pHex, sHex)
@@ -323,28 +356,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                             onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                         )
                     }
-                    6 -> Column(modifier = Modifier.fillMaxSize()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth(),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { selectedTabIndex = 0 }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                }
-                                Text(
-                                    text = "Settings & Rules",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                    activeOverlay == "SETTINGS" -> {
                         SettingsScreen(
                             settings = settings,
                             mpState = mpState,
@@ -361,6 +373,155 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                             onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
                             onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                         )
+                    }
+                    selectedBottomNav == BottomNavDestination.HOME -> {
+                        HomeScreen(
+                            humanTeam = humanTeam,
+                            financialSummary = financials,
+                            rosterAnalytics = rosterAnalytics,
+                            freshnessState = freshness,
+                            syncStatus = syncStatus,
+                            isSyncing = isSyncing,
+                            liveGames = liveGames,
+                            allScoredPlayers = allScoredPlayers,
+                            fantasyTeams = fantasyTeams,
+                            matchups = matchups,
+                            newsHeadlines = newsHeadlines,
+                            mpState = mpState,
+                            onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
+                            onPlayerClick = { vm.openPlayerDetail(it) },
+                            onNavigateMainTab = { target ->
+                                when (target) {
+                                    0 -> selectedBottomNav = BottomNavDestination.HOME
+                                    1 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.MATCH
+                                    }
+                                    2 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.TEAM
+                                    }
+                                    3 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.PLAYERS
+                                    }
+                                    4 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
+                                    }
+                                    5 -> activeOverlay = "DRAFT"
+                                    6 -> activeOverlay = "SETTINGS"
+                                }
+                            },
+                            onNavigateLeagueSubTab = {
+                                vm.setLeagueTab(it)
+                                selectedBottomNav = BottomNavDestination.FANTASY
+                                activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
+                            },
+                            onSimulateNextWeek = { vm.simulateNextWeek() }
+                        )
+                    }
+                    selectedBottomNav == BottomNavDestination.SCORES -> {
+                        ScoresScreen(
+                            liveGames = liveGames,
+                            isSyncing = isSyncing,
+                            freshness = freshness,
+                            onRefreshScores = { vm.refreshLiveScores() }
+                        )
+                    }
+                    selectedBottomNav == BottomNavDestination.PROFILE -> {
+                        ProfileScreen(
+                            humanTeam = humanTeam,
+                            financials = financials,
+                            transactions = transactions,
+                            freshnessState = freshness,
+                            isSyncing = isSyncing,
+                            onOpenSettings = { activeOverlay = "SETTINGS" },
+                            onRefreshData = { vm.triggerFullSync(silentIfCached = false) }
+                        )
+                    }
+                    selectedBottomNav == BottomNavDestination.FANTASY -> {
+                        when (activeLeagueSubTab) {
+                            SleeperLeagueSubTab.MATCH -> {
+                                MatchupScreen(
+                                    matchups = matchups,
+                                    fantasyTeams = fantasyTeams,
+                                    humanTeam = humanTeam,
+                                    controlledTeamId = controlledTeamId,
+                                    allScoredPlayers = allScoredPlayers,
+                                    seasonNumber = settings.currentSeasonNumber,
+                                    mpState = mpState,
+                                    onPlayerClick = { vm.openPlayerDetail(it) },
+                                    onSimulateNextWeek = { vm.simulateNextWeek() },
+                                    onStartNextSeason = { vm.launchNextSeason() },
+                                    onGoToTeam = { activeLeagueSubTab = SleeperLeagueSubTab.TEAM }
+                                )
+                            }
+                            SleeperLeagueSubTab.TEAM -> {
+                                MyTeamScreen(
+                                    humanTeam = humanTeam,
+                                    rosterScored = userRosterScored,
+                                    analytics = rosterAnalytics,
+                                    financials = financials,
+                                    transactions = transactions,
+                                    onPlayerClick = { vm.openPlayerDetail(it) },
+                                    onSellPlayer = { vm.requestSellPlayer(it) },
+                                    onAutoSetLineup = { vm.autoSetOptimalLineup() },
+                                    onAssignSlot = { pid, slot -> vm.assignLineupSlot(pid, slot) },
+                                    onSaveBranding = { n, a, e, p, s -> vm.saveFranchiseCustomization(n, a, e, p, s) },
+                                    onGoToMarketplace = { activeLeagueSubTab = SleeperLeagueSubTab.PLAYERS }
+                                )
+                            }
+                            SleeperLeagueSubTab.PLAYERS -> {
+                                MarketplaceScreen(
+                                    players = filteredMarketPlayers,
+                                    nhlTeams = nhlTeams,
+                                    humanTeam = humanTeam,
+                                    filterState = marketFilter,
+                                    isSyncing = isSyncing,
+                                    onUpdateFilter = { vm.updateMarketFilter(it) },
+                                    onPlayerClick = { vm.openPlayerDetail(it) },
+                                    onBuyClick = { vm.requestBuyPlayer(it) },
+                                    onSellClick = { vm.requestSellPlayer(it) },
+                                    onWatchlistToggle = { vm.toggleWatchlist(it) }
+                                )
+                            }
+                            SleeperLeagueSubTab.LEAGUE -> {
+                                LeagueScreen(
+                                    activeTab = leagueTab,
+                                    onSelectTab = { vm.setLeagueTab(it) },
+                                    fantasyTeams = fantasyTeams,
+                                    humanTeam = humanTeam,
+                                    controlledTeamId = controlledTeamId,
+                                    mpState = mpState,
+                                    matchups = matchups,
+                                    seasonArchives = seasonArchives,
+                                    tradeProposals = tradeProposals,
+                                    allScoredPlayers = allScoredPlayers,
+                                    nhlTeams = nhlTeams,
+                                    liveGames = liveGames,
+                                    settings = settings,
+                                    isSyncing = isSyncing,
+                                    savedOptionalApiKey = vm.getSavedOptionalApiKey(),
+                                    onSimulateNextWeek = { vm.simulateNextWeek() },
+                                    onStartNextSeason = { vm.launchNextSeason() },
+                                    onProposeTrade = { targetTeamId, off, offC, req, reqC ->
+                                        vm.submitTradeProposal(targetTeamId, off, offC, req, reqC)
+                                    },
+                                    onSolicitCpuOffer = { vm.solicitCpuTradeOffer() },
+                                    onRespondToTrade = { id, acc -> vm.respondToTradeOffer(id, acc) },
+                                    onRefreshLiveScores = { vm.refreshLiveScores() },
+                                    onPlayerClick = { vm.openPlayerDetail(it) },
+                                    onSaveTheme = { vm.setThemeMode(it) },
+                                    onSaveEconomy = { cfg, recalc -> vm.saveEconomySettings(cfg, recalc) },
+                                    onSaveScoring = { vm.saveScoringWeights(it) },
+                                    onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
+                                    onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) },
+                                    onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
+                                    onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -399,7 +560,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                 onJumpToTradeWithOwner = {
                     vm.closePlayerDetail()
                     vm.setLeagueTab(LeagueSectionTab.TRADES)
-                    selectedTabIndex = 4
+                    selectedBottomNav = BottomNavDestination.FANTASY
+                    activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
                 }
             )
         }

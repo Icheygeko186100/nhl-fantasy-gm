@@ -1,20 +1,19 @@
 package com.nhlfantasygm.ui.screens
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nhlfantasygm.data.local.FantasyMatchupEntity
 import com.nhlfantasygm.data.local.FantasyTeamEntity
+import com.nhlfantasygm.model.InjurySeverity
 import com.nhlfantasygm.model.LineupSlot
 import com.nhlfantasygm.model.TeamEmblem
 import com.nhlfantasygm.multiplayer.MultiplayerUiState
@@ -63,282 +63,263 @@ fun MatchupScreen(
         matchups.filter { it.weekNumber == selectedWeek }
     }
 
-    val userMatchup = remember(currentWeekMatchups, controlledTeamId) {
-        currentWeekMatchups.firstOrNull { it.homeTeamId == controlledTeamId || it.awayTeamId == controlledTeamId }
-            ?: currentWeekMatchups.firstOrNull()
+    var selectedMatchupIndex by remember(selectedWeek, controlledTeamId) {
+        val userIdx = currentWeekMatchups.indexOfFirst {
+            it.homeTeamId == controlledTeamId || it.awayTeamId == controlledTeamId
+        }
+        mutableIntStateOf(if (userIdx >= 0) userIdx else 0)
     }
 
-    val opponentTeamId = remember(userMatchup, controlledTeamId) {
-        if (userMatchup == null) null
-        else if (userMatchup.homeTeamId == controlledTeamId) userMatchup.awayTeamId
-        else userMatchup.homeTeamId
+    val activeMatchup = remember(currentWeekMatchups, selectedMatchupIndex) {
+        currentWeekMatchups.getOrNull(selectedMatchupIndex) ?: currentWeekMatchups.firstOrNull()
     }
 
-    val userTeamObj = remember(fantasyTeams, controlledTeamId) {
-        fantasyTeams.firstOrNull { it.teamId == controlledTeamId } ?: humanTeam
-    }
-    val opponentTeamObj = remember(fantasyTeams, opponentTeamId) {
-        fantasyTeams.firstOrNull { it.teamId == opponentTeamId }
+    val isUserInMatchup = activeMatchup != null &&
+            (activeMatchup.homeTeamId == controlledTeamId || activeMatchup.awayTeamId == controlledTeamId)
+
+    val (leftTeamId, rightTeamId) = remember(activeMatchup, controlledTeamId) {
+        if (activeMatchup == null) "" to ""
+        else if (activeMatchup.homeTeamId == controlledTeamId) {
+            activeMatchup.homeTeamId to activeMatchup.awayTeamId
+        } else if (activeMatchup.awayTeamId == controlledTeamId) {
+            activeMatchup.awayTeamId to activeMatchup.homeTeamId
+        } else {
+            activeMatchup.awayTeamId to activeMatchup.homeTeamId
+        }
     }
 
-    val isUserHome = userMatchup?.homeTeamId == controlledTeamId
-    val userScore = if (userMatchup == null) 0.0 else if (isUserHome) userMatchup.homeScore else userMatchup.awayScore
-    val oppScore = if (userMatchup == null) 0.0 else if (isUserHome) userMatchup.awayScore else userMatchup.homeScore
-
-    // Players assigned to User's starters vs bench
-    val userPlayers = remember(allScoredPlayers, controlledTeamId) {
-        allScoredPlayers.filter { it.player.ownerFantasyTeamId == controlledTeamId }
+    val leftTeamObj = remember(fantasyTeams, leftTeamId) {
+        fantasyTeams.firstOrNull { it.teamId == leftTeamId } ?: humanTeam
     }
-    val userStarters = remember(userPlayers) {
-        userPlayers.filter { it.player.lineupSlot.isActiveStarter }
+    val rightTeamObj = remember(fantasyTeams, rightTeamId) {
+        fantasyTeams.firstOrNull { it.teamId == rightTeamId }
+    }
+
+    val isLeftHome = activeMatchup?.homeTeamId == leftTeamId
+    val leftScore = if (activeMatchup == null) 0.0 else if (isLeftHome) activeMatchup.homeScore else activeMatchup.awayScore
+    val rightScore = if (activeMatchup == null) 0.0 else if (isLeftHome) activeMatchup.awayScore else activeMatchup.homeScore
+
+    // Players assigned to Left Team
+    val leftPlayers = remember(allScoredPlayers, leftTeamId) {
+        allScoredPlayers.filter { it.player.ownerFantasyTeamId == leftTeamId }
+    }
+    val leftStarters = remember(leftPlayers) {
+        leftPlayers.filter { it.player.lineupSlot.isActiveStarter }
             .sortedBy { it.player.lineupSlot.ordinal }
     }
-    val userBench = remember(userPlayers) {
-        userPlayers.filter { !it.player.lineupSlot.isActiveStarter }
+    val leftBench = remember(leftPlayers) {
+        leftPlayers.filter { !it.player.lineupSlot.isActiveStarter }
             .sortedByDescending { it.fantasy.seasonPoints }
     }
 
-    // Players assigned to Opponent
-    val opponentPlayers = remember(allScoredPlayers, opponentTeamId) {
-        if (opponentTeamId == null) emptyList()
-        else allScoredPlayers.filter { it.player.ownerFantasyTeamId == opponentTeamId }
+    // Players assigned to Right Team
+    val rightPlayers = remember(allScoredPlayers, rightTeamId) {
+        allScoredPlayers.filter { it.player.ownerFantasyTeamId == rightTeamId }
     }
-    val opponentStarters = remember(opponentPlayers) {
-        opponentPlayers.filter { it.player.lineupSlot.isActiveStarter }
+    val rightStarters = remember(rightPlayers) {
+        rightPlayers.filter { it.player.lineupSlot.isActiveStarter }
             .sortedBy { it.player.lineupSlot.ordinal }
     }
-    val opponentBench = remember(opponentPlayers) {
-        opponentPlayers.filter { !it.player.lineupSlot.isActiveStarter }
+    val rightBench = remember(rightPlayers) {
+        rightPlayers.filter { !it.player.lineupSlot.isActiveStarter }
             .sortedByDescending { it.fantasy.seasonPoints }
-    }
-
-    val otherMatchups = remember(currentWeekMatchups, userMatchup) {
-        currentWeekMatchups.filter { it.matchupId != userMatchup?.matchupId }
     }
 
     val isSeasonFinished = remember(matchups) {
         matchups.isNotEmpty() && matchups.all { it.isCompleted } &&
-            matchups.any { it.stage == "CHAMPIONSHIP_FINAL" }
+                matchups.any { it.stage == "CHAMPIONSHIP_FINAL" }
+    }
+
+    // Dynamic win probability calculation (Sleeper style)
+    val (leftWinPct, rightWinPct) = remember(leftScore, rightScore, leftStarters, rightStarters, activeMatchup?.isCompleted) {
+        if (activeMatchup?.isCompleted == true) {
+            if (leftScore > rightScore) 100 to 0
+            else if (rightScore > leftScore) 0 to 100
+            else 50 to 50
+        } else if (leftScore > 0 || rightScore > 0) {
+            val total = (leftScore + rightScore).coerceAtLeast(1.0)
+            val leftP = ((leftScore / total) * 100).toInt().coerceIn(15, 85)
+            leftP to (100 - leftP)
+        } else {
+            val leftPj = leftStarters.sumOf { (it.fantasy.seasonPoints / maxOf(1, it.player.gamesPlayed)).coerceAtLeast(1.2) * 3.2 } + 70.0
+            val rightPj = rightStarters.sumOf { (it.fantasy.seasonPoints / maxOf(1, it.player.gamesPlayed)).coerceAtLeast(1.2) * 3.2 } + 68.0
+            val totalPj = (leftPj + rightPj).coerceAtLeast(1.0)
+            val leftP = ((leftPj / totalPj) * 100).toInt().coerceIn(20, 80)
+            leftP to (100 - leftP)
+        }
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0B0E17)),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Clean Week Navigation Bar
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val prevWeek = availableWeeks.lastOrNull { it < selectedWeek }
-                val nextWeek = availableWeeks.firstOrNull { it > selectedWeek }
-
-                IconButton(
-                    onClick = { if (prevWeek != null) selectedWeek = prevWeek },
-                    enabled = prevWeek != null
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Week")
-                }
-
-                val stageLabel = when (selectedWeek) {
-                    15 -> "Playoff Semifinals"
-                    16 -> "Stanley Fantasy Final 🏆"
-                    else -> "Week $selectedWeek Matchup"
-                }
-                Text(
-                    text = stageLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (selectedWeek >= 15) TrophyGold else IceCyan
-                )
-
-                IconButton(
-                    onClick = { if (nextWeek != null) selectedWeek = nextWeek },
-                    enabled = nextWeek != null
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Week")
-                }
-            }
-        }
-
-        // 2. Sleeper Clean Scoreboard Hero Card
-        if (userMatchup != null && userTeamObj != null && opponentTeamObj != null) {
+        // 1. Sleeper Matchup Hero Card (matching reference screenshot)
+        if (activeMatchup != null && leftTeamObj != null && rightTeamObj != null) {
             item {
-                CleanSleeperScoreboard(
-                    matchup = userMatchup,
-                    userTeam = userTeamObj,
-                    oppTeam = opponentTeamObj,
-                    userScore = userScore,
-                    oppScore = oppScore,
+                SleeperMatchupHeroCard(
+                    matchup = activeMatchup,
+                    leftTeam = leftTeamObj,
+                    rightTeam = rightTeamObj,
+                    leftScore = leftScore,
+                    rightScore = rightScore,
+                    leftWinPct = leftWinPct,
+                    rightWinPct = rightWinPct,
+                    isUserInMatchup = isUserInMatchup,
+                    matchupCount = currentWeekMatchups.size,
+                    currentMatchupIndex = selectedMatchupIndex,
+                    onSelectMatchupIndex = { selectedMatchupIndex = it },
+                    canSimulate = mpState.role != RoomRole.GUEST && !activeMatchup.isCompleted,
                     isSeasonFinished = isSeasonFinished,
-                    canSimulate = mpState.role != RoomRole.GUEST,
                     onSimulateWeek = onSimulateNextWeek,
-                    onStartNextSeason = onStartNextSeason,
-                    onGoToTeam = onGoToTeam
+                    onStartNextSeason = onStartNextSeason
                 )
             }
         }
 
-        // 3. Section Header for Lineup Comparison
+        // 2. Starters Section Header (Left: "Starters", Right: "WEEK 8 >")
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 2.dp),
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Starters Head-to-Head",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "Starters",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
                 )
-                TextButton(
-                    onClick = onGoToTeam,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable {
+                        // Cycle to next available week
+                        val nextW = availableWeeks.firstOrNull { it > selectedWeek } ?: availableWeeks.firstOrNull() ?: 1
+                        selectedWeek = nextW
+                    }
                 ) {
-                    Text("Edit Lineup", style = MaterialTheme.typography.labelMedium, color = IceCyan)
+                    Text(
+                        text = "WEEK $selectedWeek",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF00E5FF)
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Next Week",
+                        tint = Color(0xFF00E5FF),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
 
-        // 4. Clean Sleeper Slot-by-Slot Comparison Table
+        // 3. Starters Slot-by-Slot Table (Sleeper layout: Left Player | Score | Center Badge | Score | Right Player)
         val starterSlots = listOf(
-            LineupSlot.C1, LineupSlot.C2, LineupSlot.C3,
-            LineupSlot.LW1, LineupSlot.LW2, LineupSlot.LW3,
-            LineupSlot.RW1, LineupSlot.RW2, LineupSlot.RW3,
-            LineupSlot.LD1, LineupSlot.RD1,
-            LineupSlot.LD2, LineupSlot.RD2,
-            LineupSlot.LD3, LineupSlot.RD3,
-            LineupSlot.G1, LineupSlot.G2
+            LineupSlot.C1,
+            LineupSlot.C2,
+            LineupSlot.LW1,
+            LineupSlot.LW2,
+            LineupSlot.RW1,
+            LineupSlot.RW2,
+            LineupSlot.LD1,
+            LineupSlot.RD1,
+            LineupSlot.LD2,
+            LineupSlot.RD2,
+            LineupSlot.C3,
+            LineupSlot.LW3,
+            LineupSlot.RW3,
+            LineupSlot.LD3,
+            LineupSlot.RD3,
+            LineupSlot.G1,
+            LineupSlot.G2
         )
 
         items(starterSlots) { slot ->
-            val myPlayer = userStarters.firstOrNull { it.player.lineupSlot == slot }
-            val oppPlayer = opponentStarters.firstOrNull { it.player.lineupSlot == slot }
+            val leftPlayer = leftStarters.firstOrNull { it.player.lineupSlot == slot }
+                ?: leftStarters.getOrNull(starterSlots.indexOf(slot))
+            val rightPlayer = rightStarters.firstOrNull { it.player.lineupSlot == slot }
+                ?: rightStarters.getOrNull(starterSlots.indexOf(slot))
+
             SleeperSlotRow(
                 slot = slot,
-                myPlayer = myPlayer,
-                oppPlayer = oppPlayer,
+                leftPlayer = leftPlayer,
+                rightPlayer = rightPlayer,
+                isCompleted = activeMatchup?.isCompleted == true,
                 onPlayerClick = onPlayerClick
             )
         }
 
-        // 5. Bench Reserves Section
-        if (userBench.isNotEmpty() || opponentBench.isNotEmpty()) {
+        // 4. Bench Section
+        if (leftBench.isNotEmpty() || rightBench.isNotEmpty()) {
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = "Bench Reserves",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFF94A3B8),
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
 
-            val maxBench = maxOf(userBench.size, opponentBench.size)
+            val maxBench = maxOf(leftBench.size, rightBench.size)
             items(maxBench) { idx ->
-                val myBench = userBench.getOrNull(idx)
-                val oppBench = opponentBench.getOrNull(idx)
+                val leftB = leftBench.getOrNull(idx)
+                val rightB = rightBench.getOrNull(idx)
                 SleeperBenchRow(
-                    slotLabel = "BN${idx + 1}",
-                    myPlayer = myBench,
-                    oppPlayer = oppBench,
+                    slotIndex = idx + 1,
+                    leftPlayer = leftB,
+                    rightPlayer = rightB,
+                    isCompleted = activeMatchup?.isCompleted == true,
                     onPlayerClick = onPlayerClick
                 )
             }
         }
 
-        // 6. Other Matchups Around the League
-        if (otherMatchups.isNotEmpty()) {
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "League Scoreboard • Week $selectedWeek",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            items(otherMatchups, key = { it.matchupId }) { om ->
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "${om.awayTeamName} vs ${om.homeTeamName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (om.isCompleted) "Completed" else "Scheduled",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Text(
-                            text = if (om.isCompleted) {
-                                "${String.format(Locale.CANADA, "%.1f", om.awayScore)} - ${String.format(Locale.CANADA, "%.1f", om.homeScore)}"
-                            } else "—",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (om.isCompleted) ProfitEmerald else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-
         item {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
+/**
+ * Sleeper Hero Scoreboard Card.
+ * Exact match to user's uploaded Sleeper reference screenshot:
+ * - Left avatar with green WIN% pill
+ * - Center score with hockey icon divider
+ * - Right avatar with red WIN% pill
+ * - Team names & handles underneath
+ * - Carousel dots
+ */
 @Composable
-private fun CleanSleeperScoreboard(
+private fun SleeperMatchupHeroCard(
     matchup: FantasyMatchupEntity,
-    userTeam: FantasyTeamEntity,
-    oppTeam: FantasyTeamEntity,
-    userScore: Double,
-    oppScore: Double,
-    isSeasonFinished: Boolean,
+    leftTeam: FantasyTeamEntity,
+    rightTeam: FantasyTeamEntity,
+    leftScore: Double,
+    rightScore: Double,
+    leftWinPct: Int,
+    rightWinPct: Int,
+    isUserInMatchup: Boolean,
+    matchupCount: Int,
+    currentMatchupIndex: Int,
+    onSelectMatchupIndex: (Int) -> Unit,
     canSimulate: Boolean,
+    isSeasonFinished: Boolean,
     onSimulateWeek: () -> Unit,
-    onStartNextSeason: () -> Unit,
-    onGoToTeam: () -> Unit
+    onStartNextSeason: () -> Unit
 ) {
-    val totalScore = (userScore + oppScore).coerceAtLeast(1.0)
-    val userProgress = (userScore / totalScore).toFloat().coerceIn(0.05f, 0.95f)
-    val animatedProgress by animateFloatAsState(
-        targetValue = userProgress,
-        animationSpec = tween(durationMillis = 500),
-        label = "progress"
-    )
-
-    val isWinning = userScore > oppScore
-    val diff = userScore - oppScore
-
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, if (matchup.isCompleted) (if (isWinning) ProfitEmerald.copy(alpha = 0.6f) else IceCyan.copy(alpha = 0.4f)) else MaterialTheme.colorScheme.outline)
+        color = Color(0xFF131D31),
+        border = BorderStroke(1.dp, Color(0xFF223555)),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
@@ -346,341 +327,559 @@ private fun CleanSleeperScoreboard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Team vs Team Clean Header
+            // Avatars, Win % Pills & Center Scores
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // User Side
+                // Left Team Avatar & Win % Pill
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     FranchiseCrestBadge(
-                        emblem = TeamEmblem.fromId(userTeam.emblemId),
-                        primaryColorHex = userTeam.primaryColorHex,
-                        secondaryColorHex = userTeam.secondaryColorHex,
-                        abbreviation = userTeam.abbreviation,
-                        size = 36.dp
+                        emblem = TeamEmblem.fromId(leftTeam.emblemId),
+                        primaryColorHex = leftTeam.primaryColorHex,
+                        secondaryColorHex = leftTeam.secondaryColorHex,
+                        abbreviation = leftTeam.abbreviation,
+                        size = 44.dp
                     )
-                    Column {
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF064E3B).copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, ProfitEmerald.copy(alpha = 0.6f))
+                    ) {
                         Text(
-                            text = userTeam.teamName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "You (${userTeam.wins}-${userTeam.losses})",
+                            text = "$leftWinPct% WIN",
                             style = MaterialTheme.typography.labelSmall,
-                            color = ProfitEmerald
+                            fontWeight = FontWeight.Black,
+                            color = ProfitEmerald,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
 
-                // Opponent Side
+                // Center Scores & Mascot / Puck Divider
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = oppTeam.teamName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.End
+                            text = if (matchup.isCompleted) "FINAL" else "—",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF7E8B9F),
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${if (oppTeam.isCpuGm) "CPU" else "Opponent"} (${oppTeam.wins}-${oppTeam.losses})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = String.format(Locale.CANADA, "%.2f", leftScore),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            color = if (leftScore >= rightScore && matchup.isCompleted) ProfitEmerald else Color.White
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
+
+                    // Small center divider icon
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1E293B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🏒", fontSize = 11.sp)
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = if (matchup.isCompleted) "FINAL" else "—",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF7E8B9F),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = String.format(Locale.CANADA, "%.2f", rightScore),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            color = if (rightScore > leftScore && matchup.isCompleted) ProfitEmerald else Color.White
+                        )
+                    }
+                }
+
+                // Right Team Avatar & Win % Pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF4C0519).copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, AlertRed.copy(alpha = 0.6f))
+                    ) {
+                        Text(
+                            text = "$rightWinPct% WIN",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = AlertRed,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
                     FranchiseCrestBadge(
-                        emblem = TeamEmblem.fromId(oppTeam.emblemId),
-                        primaryColorHex = oppTeam.primaryColorHex,
-                        secondaryColorHex = oppTeam.secondaryColorHex,
-                        abbreviation = oppTeam.abbreviation,
-                        size = 36.dp
+                        emblem = TeamEmblem.fromId(rightTeam.emblemId),
+                        primaryColorHex = rightTeam.primaryColorHex,
+                        secondaryColorHex = rightTeam.secondaryColorHex,
+                        abbreviation = rightTeam.abbreviation,
+                        size = 44.dp
                     )
                 }
             }
 
-            // Big Numbers & Lead Indicator
+            // Team Names and Handles / Records
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = String.format(Locale.CANADA, "%.1f", userScore),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (isWinning) ProfitEmerald else MaterialTheme.colorScheme.onSurface
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = leftTeam.teamName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "@${leftTeam.gmDisplayName.ifBlank { "gm" }} • ${leftTeam.wins}-${leftTeam.losses} (#${leftTeam.teamId.takeLast(1).toIntOrNull()?.plus(1) ?: 1})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7E8B9F)
+                    )
+                }
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
                 ) {
                     Text(
-                        text = if (diff >= 0) "+${String.format(Locale.CANADA, "%.1f", diff)}" else String.format(Locale.CANADA, "%.1f", diff),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (diff >= 0) ProfitEmerald else AlertRed
+                        text = rightTeam.teamName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "@${rightTeam.gmDisplayName.ifBlank { "cpu" }} • ${rightTeam.wins}-${rightTeam.losses} (#${rightTeam.teamId.takeLast(1).toIntOrNull()?.plus(1) ?: 2})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7E8B9F),
+                        textAlign = TextAlign.End
                     )
                 }
-
-                Text(
-                    text = String.format(Locale.CANADA, "%.1f", oppScore),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (!isWinning && diff != 0.0) AlertRed else MaterialTheme.colorScheme.onSurface
-                )
             }
 
-            // Clean Momentum Progress Bar
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = if (isWinning) ProfitEmerald else IceCyan,
-                trackColor = AlertRed.copy(alpha = 0.5f)
-            )
+            // Carousel Dot Indicators (Sleeper style)
+            if (matchupCount > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(matchupCount) { idx ->
+                        val isCurrent = idx == currentMatchupIndex
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(if (isCurrent) 7.dp else 5.dp)
+                                .clip(CircleShape)
+                                .background(if (isCurrent) Color(0xFF00E5FF) else Color(0xFF334155))
+                                .clickable { onSelectMatchupIndex(idx) }
+                        )
+                    }
+                }
+            }
 
-            // One-Tap Action Button
+            // Action Button: Simulate Matchup or Championship Launch
             if (isSeasonFinished) {
                 Button(
                     onClick = onStartNextSeason,
-                    enabled = canSimulate,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = TrophyGold, contentColor = Color.Black)
-                ) {
-                    Icon(Icons.Default.EmojiEvents, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Launch Next Fantasy Season", fontWeight = FontWeight.Bold)
-                }
-            } else if (!matchup.isCompleted) {
-                Button(
-                    onClick = onSimulateWeek,
-                    enabled = canSimulate,
+                    colors = ButtonDefaults.buttonColors(containerColor = TrophyGold, contentColor = Color.Black),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.FastForward, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Simulate Week ${matchup.weekNumber}", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Season Champion Crowned • Launch Next Season", fontWeight = FontWeight.Bold)
+                }
+            } else if (canSimulate) {
+                Button(
+                    onClick = onSimulateWeek,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color(0xFF001F29)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Simulate Week ${matchup.weekNumber} Games", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
+/**
+ * Clean Slot Row matching Sleeper's exact table:
+ * Left Player | Left Score | Center Position Badge | Right Score | Right Player
+ */
 @Composable
 private fun SleeperSlotRow(
     slot: LineupSlot,
-    myPlayer: ScoredPlayerItem?,
-    oppPlayer: ScoredPlayerItem?,
+    leftPlayer: ScoredPlayerItem?,
+    rightPlayer: ScoredPlayerItem?,
+    isCompleted: Boolean,
     onPlayerClick: (Long) -> Unit
 ) {
+    val (posCode, badgeColor) = when {
+        slot.code.startsWith("C") -> "C" to Color(0xFF10B981) // Mint Teal
+        slot.code.startsWith("LW") -> "LW" to Color(0xFFF97316) // Coral
+        slot.code.startsWith("RW") -> "RW" to Color(0xFFEC4899) // Magenta Pink
+        slot.code.startsWith("LD") || slot.code.startsWith("RD") || slot.code.startsWith("D") -> "D" to Color(0xFF8B5CF6) // Purple
+        slot.code.startsWith("G") -> "G" to Color(0xFFF59E0B) // Amber
+        else -> "BN" to Color(0xFF475569) // Slate
+    }
+
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        color = Color.Transparent,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Position Pill
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.width(34.dp)
-            ) {
-                Text(
-                    text = slot.code,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = IceCyan,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 3.dp)
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            // My Player Info & Score
+            // LEFT PLAYER
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = myPlayer != null) { myPlayer?.let { onPlayerClick(it.player.playerId) } },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable(enabled = leftPlayer != null) {
+                        leftPlayer?.let { onPlayerClick(it.player.playerId) }
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (myPlayer != null) {
-                    Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 4.dp)
+                ) {
+                    if (leftPlayer != null) {
                         Text(
-                            text = myPlayer.player.lastName,
+                            text = "${leftPlayer.player.firstName.take(1)}. ${leftPlayer.player.lastName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = posCode,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = badgeColor
+                            )
+                            Text(
+                                text = " • ${leftPlayer.player.teamAbbrev} (${leftPlayer.player.sweaterNumber})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF7E8B9F)
+                            )
+                            if (leftPlayer.player.injurySeverity != InjurySeverity.HEALTHY) {
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = if (leftPlayer.player.injurySeverity == InjurySeverity.DAY_TO_DAY) "DTD" else "IR",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (leftPlayer.player.injurySeverity == InjurySeverity.DAY_TO_DAY) WarningAmber else AlertRed
+                                )
+                            }
+                        }
                         Text(
-                            text = "${myPlayer.player.teamAbbrev} • ${if (myPlayer.player.todayOpponentLabel.isNotBlank()) myPlayer.player.todayOpponentLabel else "Next"}",
+                            text = if (leftPlayer.player.todayOpponentLabel.isNotBlank()) leftPlayer.player.todayOpponentLabel else "Next Game",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color(0xFF64748B),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    } else {
+                        Text(
+                            text = "Empty Slot",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B)
                         )
                     }
+                }
+
+                // Left score
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(end = 6.dp)
+                ) {
                     Text(
-                        text = String.format(Locale.CANADA, "%.1f", myPlayer.fantasy.seasonPoints),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = ProfitEmerald
+                        text = if (isCompleted) "F" else "—",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B)
                     )
-                } else {
-                    Text("—", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("0.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = if (leftPlayer != null) String.format(Locale.CANADA, "%.2f", leftPlayer.fantasy.seasonPoints) else "0.00",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
 
-            // Divider
-            VerticalDivider(
+            // DEAD CENTER POSITION BADGE
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = badgeColor.copy(alpha = 0.22f),
+                border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.6f)),
                 modifier = Modifier
-                    .height(26.dp)
-                    .padding(horizontal = 8.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-            )
+                    .width(36.dp)
+                    .height(28.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = posCode,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Black,
+                        color = badgeColor
+                    )
+                }
+            }
 
-            // Opponent Player Info & Score
+            // RIGHT PLAYER
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = oppPlayer != null) { oppPlayer?.let { onPlayerClick(it.player.playerId) } },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable(enabled = rightPlayer != null) {
+                        rightPlayer?.let { onPlayerClick(it.player.playerId) }
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (oppPlayer != null) {
+                // Right score
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.padding(start = 6.dp)
+                ) {
                     Text(
-                        text = String.format(Locale.CANADA, "%.1f", oppPlayer.fantasy.seasonPoints),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = if (isCompleted) "F" else "—",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B)
                     )
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = if (rightPlayer != null) String.format(Locale.CANADA, "%.2f", rightPlayer.fantasy.seasonPoints) else "0.00",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 4.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (rightPlayer != null) {
                         Text(
-                            text = oppPlayer.player.lastName,
+                            text = "${rightPlayer.player.firstName.take(1)}. ${rightPlayer.player.lastName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.End
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            if (rightPlayer.player.injurySeverity != InjurySeverity.HEALTHY) {
+                                Text(
+                                    text = if (rightPlayer.player.injurySeverity == InjurySeverity.DAY_TO_DAY) "DTD" else "IR",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (rightPlayer.player.injurySeverity == InjurySeverity.DAY_TO_DAY) WarningAmber else AlertRed
+                                )
+                                Spacer(Modifier.width(3.dp))
+                            }
+                            Text(
+                                text = posCode,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = badgeColor
+                            )
+                            Text(
+                                text = " • ${rightPlayer.player.teamAbbrev} (${rightPlayer.player.sweaterNumber})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF7E8B9F)
+                            )
+                        }
                         Text(
-                            text = "${oppPlayer.player.teamAbbrev} • ${if (oppPlayer.player.todayOpponentLabel.isNotBlank()) oppPlayer.player.todayOpponentLabel else "Next"}",
+                            text = if (rightPlayer.player.todayOpponentLabel.isNotBlank()) rightPlayer.player.todayOpponentLabel else "Next Game",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color(0xFF64748B),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.End
+                        )
+                    } else {
+                        Text(
+                            text = "Empty Slot",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B),
                             textAlign = TextAlign.End
                         )
                     }
-                } else {
-                    Text("0.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("—", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
 }
 
+/**
+ * Bench Row with BN center badge.
+ */
 @Composable
 private fun SleeperBenchRow(
-    slotLabel: String,
-    myPlayer: ScoredPlayerItem?,
-    oppPlayer: ScoredPlayerItem?,
+    slotIndex: Int,
+    leftPlayer: ScoredPlayerItem?,
+    rightPlayer: ScoredPlayerItem?,
+    isCompleted: Boolean,
     onPlayerClick: (Long) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        modifier = Modifier.fillMaxWidth()
+    val badgeColor = Color(0xFF475569) // Slate gray for bench
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        // Left Bench Player
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f)
+                .clickable(enabled = leftPlayer != null) {
+                    leftPlayer?.let { onPlayerClick(it.player.playerId) }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = slotLabel,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(34.dp),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            // My Bench
-            Row(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = myPlayer != null) { myPlayer?.let { onPlayerClick(it.player.playerId) } },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(end = 4.dp)
             ) {
+                if (leftPlayer != null) {
+                    Text(
+                        text = "${leftPlayer.player.firstName.take(1)}. ${leftPlayer.player.lastName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${leftPlayer.player.position.uiShort} • ${leftPlayer.player.teamAbbrev}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7E8B9F)
+                    )
+                } else {
+                    Text("—", style = MaterialTheme.typography.bodySmall, color = Color(0xFF64748B))
+                }
+            }
+
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 6.dp)) {
                 Text(
-                    text = myPlayer?.player?.lastName ?: "—",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = if (leftPlayer != null) String.format(Locale.CANADA, "%.2f", leftPlayer.fantasy.seasonPoints) else "0.00",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
+            }
+        }
+
+        // Center Bench Badge
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = badgeColor.copy(alpha = 0.25f),
+            border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.6f)),
+            modifier = Modifier
+                .width(36.dp)
+                .height(26.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
                 Text(
-                    text = if (myPlayer != null) String.format(Locale.CANADA, "%.1f", myPlayer.fantasy.seasonPoints) else "—",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "BN",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF94A3B8)
+                )
+            }
+        }
+
+        // Right Bench Player
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(enabled = rightPlayer != null) {
+                    rightPlayer?.let { onPlayerClick(it.player.playerId) }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(horizontalAlignment = Alignment.Start, modifier = Modifier.padding(start = 6.dp)) {
+                Text(
+                    text = if (rightPlayer != null) String.format(Locale.CANADA, "%.2f", rightPlayer.fantasy.seasonPoints) else "0.00",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 
-            VerticalDivider(modifier = Modifier.height(18.dp).padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-            // Opponent Bench
-            Row(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = oppPlayer != null) { oppPlayer?.let { onPlayerClick(it.player.playerId) } },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(start = 4.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                Text(
-                    text = if (oppPlayer != null) String.format(Locale.CANADA, "%.1f", oppPlayer.fantasy.seasonPoints) else "—",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = oppPlayer?.player?.lastName ?: "—",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End
-                )
+                if (rightPlayer != null) {
+                    Text(
+                        text = "${rightPlayer.player.firstName.take(1)}. ${rightPlayer.player.lastName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End
+                    )
+                    Text(
+                        text = "${rightPlayer.player.position.uiShort} • ${rightPlayer.player.teamAbbrev}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7E8B9F),
+                        textAlign = TextAlign.End
+                    )
+                } else {
+                    Text("—", style = MaterialTheme.typography.bodySmall, color = Color(0xFF64748B), textAlign = TextAlign.End)
+                }
             }
         }
     }

@@ -199,24 +199,6 @@ fun HomeScreen(
             }
         }
 
-        // 3. Clean Quick Action Bar
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                QuickNavButton("Matchup", Icons.Default.CompareArrows) { onNavigateMainTab(1) }
-                QuickNavButton("My Roster", Icons.Default.Groups) { onNavigateMainTab(2) }
-                QuickNavButton("Waivers", Icons.Default.Storefront) { onNavigateMainTab(3) }
-                QuickNavButton("League", Icons.Default.EmojiEvents) { onNavigateMainTab(4) }
-                QuickNavButton("Trades", Icons.Default.SwapHoriz) {
-                    onNavigateLeagueSubTab(LeagueSectionTab.TRADES)
-                    onNavigateMainTab(4)
-                }
-            }
-        }
 
         // 4. Real NHL Scoreboard Strip (Today's Real Games)
         item {
