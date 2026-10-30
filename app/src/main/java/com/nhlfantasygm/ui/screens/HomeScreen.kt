@@ -88,7 +88,7 @@ fun HomeScreen(
                 team = humanTeam,
                 financials = financialSummary,
                 analytics = rosterAnalytics,
-                onMyTeamClick = { onNavigateMainTab(3) }
+                onMyTeamClick = { onNavigateMainTab(2) }
             )
         }
 
@@ -99,7 +99,7 @@ fun HomeScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateMainTab(1) },
+                        .clickable { onNavigateMainTab(5) },
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.2.dp, ProfitEmerald)
@@ -124,7 +124,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        FilledTonalButton(onClick = { onNavigateMainTab(1) }) {
+                        FilledTonalButton(onClick = { onNavigateMainTab(5) }) {
                             Text("Draft Room")
                         }
                     }
@@ -144,7 +144,7 @@ fun HomeScreen(
             )
         }
 
-        // 3. Quick Navigation Pills (Draft, Multiplayer, Marketplace, My Team, Trades, Statistics, Settings)
+        // 3. Quick Navigation Pills (Matchup, My Team, Players, League, Draft Room, Trades, Settings)
         item {
             Row(
                 modifier = Modifier
@@ -152,20 +152,17 @@ fun HomeScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                QuickNavButton("Draft", Icons.Default.HowToVote) { onNavigateMainTab(1) }
-                QuickNavButton("Invite Friends", Icons.Default.GroupAdd) { onNavigateMainTab(1) }
-                QuickNavButton("Marketplace", Icons.Default.Storefront) { onNavigateMainTab(2) }
-                QuickNavButton("My Team", Icons.Default.Groups) { onNavigateMainTab(3) }
+                QuickNavButton("Matchup", Icons.Default.CompareArrows) { onNavigateMainTab(1) }
+                QuickNavButton("My Team", Icons.Default.Groups) { onNavigateMainTab(2) }
+                QuickNavButton("Players", Icons.Default.Storefront) { onNavigateMainTab(3) }
+                QuickNavButton("League", Icons.Default.EmojiEvents) { onNavigateMainTab(4) }
+                QuickNavButton("Draft Room", Icons.Default.HowToVote) { onNavigateMainTab(5) }
                 QuickNavButton("Trades", Icons.Default.SwapHoriz) {
                     onNavigateLeagueSubTab(LeagueSectionTab.TRADES)
                     onNavigateMainTab(4)
                 }
-                QuickNavButton("Statistics", Icons.Default.QueryStats) {
-                    onNavigateLeagueSubTab(LeagueSectionTab.NHL_STATS)
-                    onNavigateMainTab(4)
-                }
                 QuickNavButton("Settings", Icons.Default.Settings) {
-                    onNavigateMainTab(5)
+                    onNavigateMainTab(6)
                 }
             }
         }
@@ -250,8 +247,16 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            FilledTonalButton(onClick = onSimulateNextWeek) {
-                                Text("Sim Week ${nextUserMatchup.weekNumber}")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(onClick = { onNavigateMainTab(1) }) {
+                                    Text("Matchup")
+                                }
+                                FilledTonalButton(onClick = onSimulateNextWeek) {
+                                    Text("Sim Week ${nextUserMatchup.weekNumber}")
+                                }
                             }
                         }
                     } else {

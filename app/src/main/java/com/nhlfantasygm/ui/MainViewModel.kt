@@ -329,7 +329,7 @@ class MainViewModel(
     fun handleIncomingInviteDeepLink(rawUri: String) {
         val code = multiplayerCoordinator.handleIncomingInviteLink(rawUri)
         if (code != null) {
-            _navigationRequests.tryEmit(1) // Navigate straight to Draft tab
+            _navigationRequests.tryEmit(5) // Navigate straight to Draft tab
         }
     }
 

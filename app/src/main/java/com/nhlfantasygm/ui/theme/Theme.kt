@@ -13,34 +13,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.nhlfantasygm.model.AppThemeMode
 
-val IceCyan = Color(0xFF00D4FF)
+val IceCyan = Color(0xFF00E5FF)
 val DeepCyan = Color(0xFF0284C7)
 val RoyalBlue = Color(0xFF3B82F6)
 val ProfitEmerald = Color(0xFF10B981)
 val TrophyGold = Color(0xFFF59E0B)
 val AlertRed = Color(0xFFEF4444)
 val WarningAmber = Color(0xFFF97316)
+val SleeperViolet = Color(0xFF8B5CF6)
 
 private val DarkRinkColorScheme = darkColorScheme(
     primary = IceCyan,
     onPrimary = Color(0xFF001F29),
     primaryContainer = Color(0xFF0D2D44),
     onPrimaryContainer = Color(0xFFB8EEFF),
-    secondary = RoyalBlue,
+    secondary = SleeperViolet,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFF172B4D),
-    onSecondaryContainer = Color(0xFFD6E4FF),
+    secondaryContainer = Color(0xFF231845),
+    onSecondaryContainer = Color(0xFFDDD6FE),
     tertiary = TrophyGold,
     onTertiary = Color(0xFF261600),
     tertiaryContainer = Color(0xFF3B2806),
     onTertiaryContainer = Color(0xFFFFDEA6),
-    background = Color(0xFF080D16),
+    background = Color(0xFF0A0F1D),
     onBackground = Color(0xFFF1F5F9),
-    surface = Color(0xFF101929),
+    surface = Color(0xFF131D31),
     onSurface = Color(0xFFF1F5F9),
-    surfaceVariant = Color(0xFF17243A),
+    surfaceVariant = Color(0xFF1A2640),
     onSurfaceVariant = Color(0xFF94A3B8),
-    outline = Color(0xFF243654),
+    outline = Color(0xFF223555),
     error = AlertRed,
     onError = Color.White
 )
