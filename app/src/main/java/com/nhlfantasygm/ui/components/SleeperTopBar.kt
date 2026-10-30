@@ -45,16 +45,16 @@ fun SleeperTopBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Team Identity & Cap Room Badge
+                // Left: Team Identity
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .clickable(onClick = onTeamClick),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (team != null) {
@@ -63,71 +63,71 @@ fun SleeperTopBar(
                             primaryColorHex = team.primaryColorHex,
                             secondaryColorHex = team.secondaryColorHex,
                             abbreviation = team.abbreviation,
-                            size = 38.dp
+                            size = 32.dp
                         )
                     }
 
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Text(
+                        text = team?.teamName ?: "My GM Franchise",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (team != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             Text(
-                                text = team?.teamName ?: "My GM Franchise",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = "${team.wins}-${team.losses}",
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (team.wins >= team.losses) ProfitEmerald else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (team != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) {
-                                    Text(
-                                        text = "${team.wins}-${team.losses}-${team.ties}",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (team.wins >= team.losses) ProfitEmerald else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
                         }
-
-                        // Cap Space / Treasury pill
-                        val capRoom = financials?.remainingCapSpaceCad ?: 7_300_000L
-                        Text(
-                            text = "${CadFormatter.formatCompact(capRoom)} Cap Space • ${CadFormatter.formatCompact(team?.cashBalanceCad ?: 100_000_000L)} Cash",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
 
-                // Right: Action Icons (Search, Draft Room, Settings)
+                // Right: Action Icons (Cap Space Pill, Search, Draft Room, Settings)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val capRoom = financials?.remainingCapSpaceCad ?: 7_300_000L
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = "${CadFormatter.formatCompact(capRoom)} Cap",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = IceCyan
+                        )
+                    }
+
                     // Quick Draft Room Icon / Pill (if active or multiplayer)
                     if (isDraftActive || mpState.isMultiplayerActive) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = if (mpState.isMultiplayerActive) ProfitEmerald.copy(alpha = 0.2f) else IceCyan.copy(alpha = 0.2f),
                             border = BorderStroke(1.dp, if (mpState.isMultiplayerActive) ProfitEmerald else IceCyan),
                             modifier = Modifier.clickable(onClick = onOpenDraft)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.HowToVote,
                                     contentDescription = "Draft Room",
                                     tint = if (mpState.isMultiplayerActive) ProfitEmerald else IceCyan,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = if (mpState.isMultiplayerActive) "LIVE" else "DRAFT",
@@ -140,20 +140,28 @@ fun SleeperTopBar(
                     }
 
                     // Instant Player Search Icon
-                    IconButton(onClick = onOpenSearch) {
+                    IconButton(
+                        onClick = onOpenSearch,
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search Players",
-                            tint = IceCyan
+                            tint = IceCyan,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
                     // Settings Cog Icon
-                    IconButton(onClick = onOpenSettings) {
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

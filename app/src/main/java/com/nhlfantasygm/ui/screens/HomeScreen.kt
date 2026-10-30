@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +36,7 @@ import com.nhlfantasygm.ui.LeagueSectionTab
 import com.nhlfantasygm.ui.ScoredPlayerItem
 import com.nhlfantasygm.ui.components.*
 import com.nhlfantasygm.ui.theme.*
+import java.util.Locale
 import kotlin.math.abs
 
 @Composable
@@ -79,20 +81,89 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Franchise Treasury & Rating Hero Card
-        item {
-            FranchiseHeroDashboardCard(
-                team = humanTeam,
-                financials = financialSummary,
-                analytics = rosterAnalytics,
-                onMyTeamClick = { onNavigateMainTab(2) }
-            )
+        // 1. Sleeper Matchup Spotlight (Top Hero Card)
+        if (nextUserMatchup != null) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.2.dp, IceCyan.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateMainTab(1) }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "WEEK ${nextUserMatchup.weekNumber} MATCHUP",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = IceCyan
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = nextUserMatchup.stage.replace("_", " "),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "${nextUserMatchup.awayTeamName} vs ${nextUserMatchup.homeTeamName}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = if (nextUserMatchup.isCompleted) {
+                                        "Final: ${String.format(Locale.CANADA, "%.1f", nextUserMatchup.awayScore)} - ${String.format(Locale.CANADA, "%.1f", nextUserMatchup.homeScore)}"
+                                    } else "Scheduled Showdown • Head-to-Head",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (nextUserMatchup.isCompleted) ProfitEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { onNavigateMainTab(1) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = IceCyan, contentColor = Color(0xFF001F29))
+                                ) {
+                                    Text("Matchup", fontWeight = FontWeight.Bold)
+                                }
+                                if (!nextUserMatchup.isCompleted) {
+                                    FilledTonalButton(onClick = onSimulateNextWeek) {
+                                        Text("Sim")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        // 1b. Active Multiplayer Room Banner (if hosting or joined)
+        // 2. Active Multiplayer Room Pill (if hosting or joined)
         if (mpState.isMultiplayerActive) {
             item {
                 val formattedCode = RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)
@@ -100,51 +171,35 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onNavigateMainTab(5) },
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.2.dp, ProfitEmerald)
+                    border = BorderStroke(1.dp, ProfitEmerald)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "MULTIPLAYER ROOM $formattedCode • ${mpState.connectionState.badgeLabel.uppercase()}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = ProfitEmerald,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Text(
-                                text = "${if (mpState.role == RoomRole.HOST) "Host Commissioner" else "Joined Friend"} • ${mpState.totalHumanParticipantsCount} Real Human GMs",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        FilledTonalButton(onClick = { onNavigateMainTab(5) }) {
-                            Text("Draft Room")
-                        }
+                        Text(
+                            text = "🟢 ROOM $formattedCode • ${mpState.totalHumanParticipantsCount} Human GMs",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ProfitEmerald,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Draft Board →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = IceCyan,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
         }
 
-        // 2. Data Freshness & Manual Sync Banner
-        item {
-            DataFreshnessBanner(
-                freshness = freshnessState,
-                lastSyncEpochMs = syncStatus?.lastFullSyncEpochMs ?: 0L,
-                playerCount = syncStatus?.syncedPlayerCount ?: allScoredPlayers.size,
-                errorMessage = syncStatus?.lastErrorMessage.orEmpty(),
-                isSyncing = isSyncing,
-                onRefreshClick = onRefreshData
-            )
-        }
-
-        // 3. Quick Navigation Pills (Matchup, My Team, Players, League, Draft Room, Trades, Settings)
+        // 3. Clean Quick Action Bar
         item {
             Row(
                 modifier = Modifier
@@ -153,48 +208,52 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 QuickNavButton("Matchup", Icons.Default.CompareArrows) { onNavigateMainTab(1) }
-                QuickNavButton("My Team", Icons.Default.Groups) { onNavigateMainTab(2) }
-                QuickNavButton("Players", Icons.Default.Storefront) { onNavigateMainTab(3) }
+                QuickNavButton("My Roster", Icons.Default.Groups) { onNavigateMainTab(2) }
+                QuickNavButton("Waivers", Icons.Default.Storefront) { onNavigateMainTab(3) }
                 QuickNavButton("League", Icons.Default.EmojiEvents) { onNavigateMainTab(4) }
-                QuickNavButton("Draft Room", Icons.Default.HowToVote) { onNavigateMainTab(5) }
                 QuickNavButton("Trades", Icons.Default.SwapHoriz) {
                     onNavigateLeagueSubTab(LeagueSectionTab.TRADES)
                     onNavigateMainTab(4)
                 }
-                QuickNavButton("Settings", Icons.Default.Settings) {
-                    onNavigateMainTab(6)
-                }
             }
         }
 
-        // 4. Current NHL Games & Live Scores
+        // 4. Real NHL Scoreboard Strip (Today's Real Games)
         item {
-            SectionHeader(
-                title = "Today's Real NHL Scoreboard",
-                subtitle = if (syncStatus?.isOffseason == true) "NHL Offseason — no scheduled games today"
-                else "Actual NHL games & live boxscore feed",
-                actionLabel = "All Stats",
-                onActionClick = {
-                    onNavigateLeagueSubTab(LeagueSectionTab.NHL_STATS)
-                    onNavigateMainTab(4)
-                }
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Today's NHL Games",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (syncStatus?.isOffseason == true) "Offseason" else if (isSyncing) "Updating..." else "Live NHL Feed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isSyncing) IceCyan else ProfitEmerald
+                )
+            }
             if (liveGames.isEmpty()) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 ) {
                     Text(
-                        text = if (isSyncing) "Syncing today's official NHL schedule..."
-                        else "No NHL games scheduled today (or live scoreboard unavailable offline).",
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = if (isSyncing) "Loading live NHL schedule..."
+                        else "No NHL games scheduled today.",
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(liveGames, key = { it.gameId }) { game ->
                         LiveNhlGameCard(
                             game = game,
@@ -208,92 +267,52 @@ fun HomeScreen(
             }
         }
 
-        // 5. Upcoming Fantasy Matchup & League Standings Preview
+        // 5. League Standings Preview
         item {
-            SectionHeader(
-                title = "Fantasy League Matchup & Standings",
-                subtitle = "Simulated fantasy league (scored from real NHL stats)",
-                actionLabel = "League Hub",
-                onActionClick = {
-                    onNavigateLeagueSubTab(LeagueSectionTab.MATCHUPS)
-                    onNavigateMainTab(4)
-                }
-            )
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                modifier = Modifier.clickable { onNavigateMainTab(4) }
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (nextUserMatchup != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "UPCOMING • WEEK ${nextUserMatchup.weekNumber} (${nextUserMatchup.stage.replace("_", " ")})",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = IceCyan,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                                Text(
-                                    text = "${nextUserMatchup.awayTeamName} @ ${nextUserMatchup.homeTeamName}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(onClick = { onNavigateMainTab(1) }) {
-                                    Text("Matchup")
-                                }
-                                FilledTonalButton(onClick = onSimulateNextWeek) {
-                                    Text("Sim Week ${nextUserMatchup.weekNumber}")
-                                }
-                            }
-                        }
-                    } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "Fantasy Season Completed! Open League Hub to crown awards or start Next Season.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TrophyGold
+                            text = "League Standings",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Full Table →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = IceCyan,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-
                     rankedStandings.forEachIndexed { idx, t ->
                         val isMe = t.teamId == humanTeam?.teamId
-                        val isFriend = !isMe && !t.isCpuGm
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "#${idx + 1} ${t.teamName}" + when {
-                                    isMe -> " (You)"
-                                    isFriend -> " (Friend)"
-                                    else -> ""
-                                },
+                                text = "${idx + 1}. ${t.teamName}${if (isMe) " (You)" else ""}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isMe || isFriend) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = when {
-                                    isMe -> ProfitEmerald
-                                    isFriend -> IceCyan
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                }
+                                fontWeight = if (isMe) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (isMe) ProfitEmerald else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${t.wins}-${t.losses}-${t.ties} • ${String.format("%.1f", t.pointsFor)} PF",
-                                style = MaterialTheme.typography.labelLarge
+                                text = "${t.wins}-${t.losses}-${t.ties} • ${String.format(Locale.CANADA, "%.1f", t.pointsFor)} PF",
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
@@ -301,19 +320,58 @@ fun HomeScreen(
             }
         }
 
-        // 6. Top Fantasy Performers
+        // 6. Top Fantasy Performers Strip
         item {
-            SectionHeader(
-                title = "Top NHL Fantasy Performers",
-                subtitle = "Calculated from actual NHL season & live game stats",
-                actionLabel = "Marketplace",
-                onActionClick = { onNavigateMainTab(2) }
+            Text(
+                text = "Trending Performers",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 2.dp)
             )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(topPerformers, key = { it.player.playerId }) { item ->
                     TopPerformerCompactCard(
                         item = item,
                         onClick = { onPlayerClick(item.player.playerId) }
+                    )
+                }
+            }
+        }
+
+        // 7. Franchise Treasury Snapshot (Clean, compact card)
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateMainTab(2) }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Franchise Cap & Cash",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${CadFormatter.formatCompact(humanTeam?.cashBalanceCad ?: 100_000_000L)} Cash • ${CadFormatter.formatCompact(financialSummary?.remainingCapSpaceCad ?: 7_300_000L)} Cap Room",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "Roster →",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = IceCyan,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
