@@ -164,8 +164,13 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                     selectedBottomNav = BottomNavDestination.FANTASY
                     activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
                 }
-                5 -> activeOverlay = "DRAFT"
+                5 -> {
+                    activeOverlay = if (mpState.pendingDeepLinkCode.isNotBlank()) "MULTIPLAYER_DRAFT_JOIN"
+                    else if (mpState.isMultiplayerActive) "MULTIPLAYER_DRAFT"
+                    else "DRAFT"
+                }
                 6 -> activeOverlay = "SETTINGS"
+                7 -> activeOverlay = "MULTIPLAYER_DRAFT"
             }
         }
     }
@@ -176,7 +181,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 when (activeOverlay) {
-                    "DRAFT" -> {
+                    "DRAFT", "MULTIPLAYER_DRAFT", "MULTIPLAYER_DRAFT_JOIN" -> {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -195,7 +200,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                                 }
                                 Text(
-                                    text = "Draft Room & Multiplayer Lobby",
+                                    text = if (activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN") "Multiplayer Draft & Lobby" else "Draft Room & Multiplayer Lobby",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White
@@ -313,7 +318,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                     .padding(innerPadding)
             ) {
                 when {
-                    activeOverlay == "DRAFT" -> {
+                    activeOverlay == "DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN" -> {
                         DraftScreen(
                             draftSession = draftSession,
                             draftConfig = vm.repository.decodeDraftConfig(draftSession),
@@ -324,6 +329,8 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                             mpState = mpState,
                             allScoredPlayers = allScoredPlayers,
                             timerRemainingSeconds = draftTimerSec,
+                            initialMultiplayerMode = (activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN"),
+                            initialJoinMode = if (activeOverlay == "MULTIPLAYER_DRAFT_JOIN") true else if (activeOverlay == "MULTIPLAYER_DRAFT") false else null,
                             onStartDraft = { vm.startDraft(it) },
                             onMakeHumanPick = { vm.draftPlayerForHuman(it) },
                             onAutoPickHuman = { vm.autoPickHumanTurn() },
@@ -409,8 +416,13 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                                         selectedBottomNav = BottomNavDestination.FANTASY
                                         activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
                                     }
-                                    5 -> activeOverlay = "DRAFT"
+                                    5 -> {
+                                        activeOverlay = if (mpState.pendingDeepLinkCode.isNotBlank()) "MULTIPLAYER_DRAFT_JOIN"
+                                        else if (mpState.isMultiplayerActive) "MULTIPLAYER_DRAFT"
+                                        else "DRAFT"
+                                    }
                                     6 -> activeOverlay = "SETTINGS"
+                                    7 -> activeOverlay = "MULTIPLAYER_DRAFT"
                                 }
                             },
                             onNavigateLeagueSubTab = {
@@ -518,7 +530,12 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                                     onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
                                     onSaveOptionalApiKey = { vm.saveOptionalApiKey(it) },
                                     onSaveCustomRelayUrl = { vm.saveCustomMultiplayerRelayUrl(it) },
-                                    onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
+                                    onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() },
+                                    draftSession = draftSession,
+                                    onOpenMultiplayerDraft = { isJoin ->
+                                        activeOverlay = if (isJoin) "MULTIPLAYER_DRAFT_JOIN" else "MULTIPLAYER_DRAFT"
+                                    },
+                                    onOpenSoloDraft = { activeOverlay = "DRAFT" }
                                 )
                             }
                         }

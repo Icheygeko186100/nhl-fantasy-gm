@@ -1,27 +1,35 @@
 package com.nhlfantasygm.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nhlfantasygm.data.local.*
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
 import com.nhlfantasygm.domain.SeasonSimulationEngine
 import com.nhlfantasygm.model.*
+import com.nhlfantasygm.multiplayer.MultiplayerRoomPhase
 import com.nhlfantasygm.multiplayer.MultiplayerUiState
 import com.nhlfantasygm.multiplayer.RoomCrypto
 import com.nhlfantasygm.multiplayer.RoomRole
@@ -62,7 +70,10 @@ fun LeagueScreen(
     onToggleOfflineSim: (Boolean) -> Unit,
     onSaveOptionalApiKey: (String) -> Unit,
     onSaveCustomRelayUrl: (String) -> Unit = {},
-    onLeaveMultiplayerRoom: () -> Unit = {}
+    onLeaveMultiplayerRoom: () -> Unit = {},
+    draftSession: DraftSessionEntity? = null,
+    onOpenMultiplayerDraft: (Boolean) -> Unit = {},
+    onOpenSoloDraft: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -70,6 +81,14 @@ fun LeagueScreen(
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Prominent Multiplayer Draft & Lobby Entry Point Banner
+        MultiplayerDraftHeroCard(
+            mpState = mpState,
+            onOpenMultiplayerDraft = {
+                onOpenMultiplayerDraft(!mpState.isMultiplayerActive && mpState.pendingDeepLinkCode.isNotBlank())
+            }
+        )
+
         // Horizontal Sub-Navigation Pills
         Row(
             modifier = Modifier
@@ -98,6 +117,13 @@ fun LeagueScreen(
             LeagueSectionTab.STANDINGS -> FantasyStandingsSection(
                 fantasyTeams = fantasyTeams,
                 controlledTeamId = controlledTeamId
+            )
+            LeagueSectionTab.DRAFTS -> LeagueDraftsSection(
+                draftSession = draftSession,
+                mpState = mpState,
+                onOpenMultiplayerDraft = onOpenMultiplayerDraft,
+                onOpenSoloDraft = onOpenSoloDraft,
+                onLeaveMultiplayerRoom = onLeaveMultiplayerRoom
             )
             LeagueSectionTab.TRADES -> TradesCenterSection(
                 fantasyTeams = fantasyTeams,
@@ -975,5 +1001,415 @@ private fun AwardRow(title: String, winner: String) {
         Text(winner, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
     }
 }
+
+@Composable
+fun MultiplayerDraftHeroCard(
+    mpState: MultiplayerUiState,
+    onOpenMultiplayerDraft: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isRoomActive = mpState.isMultiplayerActive
+    val borderColor = if (isRoomActive) ProfitEmerald else IceCyan.copy(alpha = 0.65f)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenMultiplayerDraft),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.5.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isRoomActive) ProfitEmerald.copy(alpha = 0.16f)
+                        else IceCyan.copy(alpha = 0.16f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isRoomActive) Icons.Default.Groups else Icons.Default.GroupAdd,
+                    contentDescription = "Multiplayer Draft Entry",
+                    tint = if (isRoomActive) ProfitEmerald else IceCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isRoomActive) "ROOM ${RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)}" else "MULTIPLAYER DRAFT & LOBBY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isRoomActive) ProfitEmerald else IceCyan,
+                        letterSpacing = 0.8.sp
+                    )
+                    if (isRoomActive) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(ProfitEmerald)
+                        )
+                    }
+                }
+                Text(
+                    text = if (isRoomActive) {
+                        "${if (mpState.role == RoomRole.HOST) "Host Commissioner" else "Joined Room"} • ${mpState.totalHumanParticipantsCount} Human GM(s)"
+                    } else if (mpState.pendingDeepLinkCode.isNotBlank()) {
+                        "Invite: ROOM ${RoomCrypto.formatInviteCodeForDisplay(mpState.pendingDeepLinkCode)}"
+                    } else {
+                        "Play with Friends & Family"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (isRoomActive) {
+                        "Phase: ${mpState.phase.name.replace('_', ' ')} • Tap to enter"
+                    } else if (mpState.pendingDeepLinkCode.isNotBlank()) {
+                        "Pending invite • Tap to join room"
+                    } else {
+                        "Create draft room or enter invite code"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Button(
+                onClick = onOpenMultiplayerDraft,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRoomActive) ProfitEmerald else IceCyan,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = if (isRoomActive) {
+                        if (mpState.phase == MultiplayerRoomPhase.DRAFT_IN_PROGRESS) "Draft Room" else "Lobby"
+                    } else if (mpState.pendingDeepLinkCode.isNotBlank()) "Join" else "Enter",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LeagueDraftsSection(
+    draftSession: DraftSessionEntity?,
+    mpState: MultiplayerUiState,
+    onOpenMultiplayerDraft: (Boolean) -> Unit,
+    onOpenSoloDraft: () -> Unit,
+    onLeaveMultiplayerRoom: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
+        // 1. Multiplayer Draft & Lobby Hub Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    width = 1.5.dp,
+                    color = if (mpState.isMultiplayerActive) ProfitEmerald else IceCyan.copy(alpha = 0.7f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (mpState.isMultiplayerActive) ProfitEmerald.copy(alpha = 0.2f)
+                                        else IceCyan.copy(alpha = 0.2f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GroupAdd,
+                                    contentDescription = null,
+                                    tint = if (mpState.isMultiplayerActive) ProfitEmerald else IceCyan,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Multiplayer Draft & Lobby",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "Live with Friends & Family",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (mpState.isMultiplayerActive) ProfitEmerald else IceCyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        if (mpState.isMultiplayerActive) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = ProfitEmerald.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, ProfitEmerald)
+                            ) {
+                                Text(
+                                    text = "ACTIVE ROOM",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = ProfitEmerald,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Create an encrypted multiplayer draft room to invite friends across Android phones via room codes or share links. Supports live pick timers, auto-draft protections, local Pass-and-Play friends, and live chat.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (mpState.isMultiplayerActive) {
+                        val formattedCode = RoomCrypto.formatInviteCodeForDisplay(mpState.roomCode)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Room Code: $formattedCode",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = ProfitEmerald
+                                    )
+                                    Text(
+                                        text = "${mpState.totalHumanParticipantsCount} Human GM(s) Connected • Role: ${if (mpState.role == RoomRole.HOST) "Host Commissioner" else "Guest"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                TextButton(onClick = onLeaveMultiplayerRoom) {
+                                    Text("Leave Room", color = AlertRed, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { onOpenMultiplayerDraft(false) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProfitEmerald,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = if (mpState.phase == MultiplayerRoomPhase.DRAFT_IN_PROGRESS) "Enter Live Draft Room" else "Enter Active Draft Room & Lobby",
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    } else {
+                        if (mpState.pendingDeepLinkCode.isNotBlank()) {
+                            val formattedInvite = RoomCrypto.formatInviteCodeForDisplay(mpState.pendingDeepLinkCode)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = IceCyan.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, IceCyan.copy(alpha = 0.5f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenMultiplayerDraft(true) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Pending Invite: ROOM $formattedInvite",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = IceCyan
+                                        )
+                                        Text(
+                                            text = "Tap to join friends in multiplayer draft",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Login,
+                                        contentDescription = "Join Room",
+                                        tint = IceCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { onOpenMultiplayerDraft(false) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = IceCyan,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Create Draft", fontWeight = FontWeight.ExtraBold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { onOpenMultiplayerDraft(true) },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, IceCyan),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(17.dp), tint = IceCyan)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Enter Code", fontWeight = FontWeight.Bold, color = IceCyan)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Solo vs CPU General Managers Draft Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Solo Draft vs CPU GMs",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        val statusLabel = when (draftSession?.status) {
+                            "IN_PROGRESS" -> "In Progress"
+                            "COMPLETED" -> "Completed"
+                            else -> "Not Started"
+                        }
+                        val statusColor = when (draftSession?.status) {
+                            "IN_PROGRESS" -> WarningAmber
+                            "COMPLETED" -> ProfitEmerald
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                        Text(
+                            text = statusLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = statusColor
+                        )
+                    }
+
+                    Text(
+                        text = "Build your fantasy roster through a single-player draft against AI general managers with realistic draft boards and pick strategies.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Button(
+                        onClick = onOpenSoloDraft,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        val btnText = when (draftSession?.status) {
+                            "IN_PROGRESS" -> "Resume Solo Draft"
+                            "COMPLETED" -> "View Draft Board / Restart"
+                            else -> "Start Solo Draft"
+                        }
+                        Text(btnText, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 

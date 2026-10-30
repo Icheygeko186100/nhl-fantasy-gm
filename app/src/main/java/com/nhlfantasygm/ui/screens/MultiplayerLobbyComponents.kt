@@ -125,6 +125,7 @@ fun MultiplayerSetupAndLobbyView(
     mpState: MultiplayerUiState,
     humanTeam: FantasyTeamEntity?,
     initialDraftConfig: DraftConfig,
+    initialJoinMode: Boolean? = null,
     onHostRoom: (String, DraftConfig) -> Unit,
     onJoinRoom: (String, String, String, String, TeamEmblem, Long, Long) -> Unit,
     onBuildShareText: () -> String,
@@ -143,6 +144,7 @@ fun MultiplayerSetupAndLobbyView(
             mpState = mpState,
             humanTeam = humanTeam,
             initialDraftConfig = initialDraftConfig,
+            initialJoinMode = initialJoinMode,
             onHostRoom = onHostRoom,
             onJoinRoom = onJoinRoom
         )
@@ -173,11 +175,18 @@ private fun MultiplayerCreateOrJoinSetup(
     mpState: MultiplayerUiState,
     humanTeam: FantasyTeamEntity?,
     initialDraftConfig: DraftConfig,
+    initialJoinMode: Boolean? = null,
     onHostRoom: (String, DraftConfig) -> Unit,
     onJoinRoom: (String, String, String, String, TeamEmblem, Long, Long) -> Unit
 ) {
-    var subMode by remember(mpState.pendingDeepLinkCode) {
-        mutableIntStateOf(if (mpState.pendingDeepLinkCode.isNotBlank()) 1 else 0)
+    var subMode by remember(mpState.pendingDeepLinkCode, initialJoinMode) {
+        mutableIntStateOf(
+            when (initialJoinMode) {
+                true -> 1
+                false -> 0
+                null -> if (mpState.pendingDeepLinkCode.isNotBlank()) 1 else 0
+            }
+        )
     }
     var hostGmName by remember(mpState.localGmName) { mutableStateOf(mpState.localGmName) }
 

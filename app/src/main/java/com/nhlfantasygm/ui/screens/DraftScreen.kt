@@ -50,6 +50,8 @@ fun DraftScreen(
     mpState: MultiplayerUiState = MultiplayerUiState(),
     allScoredPlayers: List<ScoredPlayerItem>,
     timerRemainingSeconds: Int,
+    initialMultiplayerMode: Boolean = false,
+    initialJoinMode: Boolean? = null,
     onStartDraft: (DraftConfig) -> Unit,
     onMakeHumanPick: (Long) -> Unit,
     onAutoPickHuman: () -> Unit,
@@ -71,9 +73,14 @@ fun DraftScreen(
     onLaunchMultiplayerDraft: () -> Unit = {},
     onLeaveMultiplayerRoom: () -> Unit = {}
 ) {
-    var forceSetupView by remember { mutableStateOf(false) }
-    var isMultiplayerTabSelected by remember {
-        mutableStateOf(mpState.isMultiplayerActive || mpState.pendingDeepLinkCode.isNotBlank())
+    val shouldForceMultiplayerSetup = (initialMultiplayerMode || (initialJoinMode == true) || mpState.pendingDeepLinkCode.isNotBlank()) &&
+        !mpState.isMultiplayerActive &&
+        (draftSession?.status == "IN_PROGRESS" || draftSession?.status == "COMPLETED")
+    var forceSetupView by remember(initialMultiplayerMode, initialJoinMode, mpState.pendingDeepLinkCode) {
+        mutableStateOf(shouldForceMultiplayerSetup)
+    }
+    var isMultiplayerTabSelected by remember(initialMultiplayerMode, initialJoinMode, mpState.isMultiplayerActive, mpState.pendingDeepLinkCode) {
+        mutableStateOf(initialMultiplayerMode || (initialJoinMode == true) || mpState.isMultiplayerActive || mpState.pendingDeepLinkCode.isNotBlank())
     }
     var showChatDialog by remember { mutableStateOf(false) }
 
@@ -112,6 +119,7 @@ fun DraftScreen(
                             mpState = mpState,
                             humanTeam = humanTeam,
                             initialDraftConfig = draftConfig,
+                            initialJoinMode = initialJoinMode,
                             onHostRoom = onHostMultiplayerRoom,
                             onJoinRoom = onJoinMultiplayerRoom,
                             onBuildShareText = onBuildMultiplayerShareText,

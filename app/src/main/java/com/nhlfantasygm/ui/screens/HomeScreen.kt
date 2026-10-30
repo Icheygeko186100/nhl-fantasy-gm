@@ -170,7 +170,7 @@ fun HomeScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateMainTab(5) },
+                        .clickable { onNavigateMainTab(7) },
                     shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, ProfitEmerald)

@@ -57,6 +57,7 @@ enum class PositionFilter(val label: String) {
 enum class LeagueSectionTab(val label: String) {
     MATCHUPS("Matchups"),
     STANDINGS("Standings"),
+    DRAFTS("Drafts"),
     TRADES("Trades"),
     NHL_STATS("NHL Live"),
     HISTORY("Awards"),
