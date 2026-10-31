@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".NhlFantasyApplication"
@@ -35,6 +36,15 @@
                     android:host="join" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".service.LiveGameNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.nhlfantasygm.ACTION_UNPIN_GAME" />
+                <action android:name="com.nhlfantasygm.ACTION_REFRESH_GAME" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

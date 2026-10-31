@@ -44,6 +44,7 @@ enum class BottomNavDestination(val index: Int, val label: String, val icon: Ima
 class MainActivity : ComponentActivity() {
 
     private val incomingDeepLinkUriFlow = MutableStateFlow<String?>(null)
+    private val incomingNavigateTabFlow = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,14 +53,22 @@ class MainActivity : ComponentActivity() {
         intent?.dataString?.takeIf { it.isNotBlank() }?.let {
             incomingDeepLinkUriFlow.value = it
         }
+        if (intent?.getStringExtra("NAVIGATE_TAB") == "SCORES") {
+            incomingNavigateTabFlow.value = "SCORES"
+        }
 
         val app = application as NhlFantasyApplication
 
         setContent {
             val vm: MainViewModel = viewModel(
-                factory = MainViewModel.factory(app.repository, app.multiplayerCoordinator)
+                factory = MainViewModel.factory(
+                    app.repository,
+                    app.multiplayerCoordinator,
+                    app.liveGameNotificationManager
+                )
             )
             val pendingDeepLink by incomingDeepLinkUriFlow.collectAsStateWithLifecycle()
+            val pendingNavigateTab by incomingNavigateTabFlow.collectAsStateWithLifecycle()
 
             LaunchedEffect(pendingDeepLink) {
                 val uri = pendingDeepLink
@@ -69,7 +78,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            NhlFantasyGmAppRoot(vm)
+            NhlFantasyGmAppRoot(
+                vm = vm,
+                pendingNavigateTab = pendingNavigateTab,
+                onClearNavigateTab = { incomingNavigateTabFlow.value = null }
+            )
         }
     }
 
@@ -79,11 +92,18 @@ class MainActivity : ComponentActivity() {
         intent.dataString?.takeIf { it.isNotBlank() }?.let {
             incomingDeepLinkUriFlow.value = it
         }
+        if (intent.getStringExtra("NAVIGATE_TAB") == "SCORES") {
+            incomingNavigateTabFlow.value = "SCORES"
+        }
     }
 }
 
 @Composable
-fun NhlFantasyGmAppRoot(vm: MainViewModel) {
+fun NhlFantasyGmAppRoot(
+    vm: MainViewModel,
+    pendingNavigateTab: String? = null,
+    onClearNavigateTab: () -> Unit = {}
+) {
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val humanTeam by vm.humanTeamState.collectAsStateWithLifecycle()
     val controlledTeamId by vm.controlledTeamIdState.collectAsStateWithLifecycle()
@@ -111,6 +131,7 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
     val leagueTab by vm.leagueTab.collectAsStateWithLifecycle()
     val pendingConfirm by vm.pendingConfirmation.collectAsStateWithLifecycle()
     val selectedPlayerDetail by vm.selectedPlayerDetail.collectAsStateWithLifecycle()
+    val pinnedGameIds by vm.pinnedGameIdsState.collectAsStateWithLifecycle()
 
     // Default directly to Sleeper's FANTASY hub on MATCH tab (matching user's reference screenshot)
     var selectedBottomNav by rememberSaveable { mutableStateOf(BottomNavDestination.FANTASY) }
@@ -118,6 +139,14 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
     var activeOverlay by rememberSaveable { mutableStateOf<String?>(null) }
     var showOmniSearch by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(pendingNavigateTab) {
+        if (pendingNavigateTab == "SCORES") {
+            activeOverlay = null
+            selectedBottomNav = BottomNavDestination.SCORES
+            onClearNavigateTab()
+        }
+    }
 
     // Smart Back Handler
     BackHandler(enabled = activeOverlay != null || selectedBottomNav != BottomNavDestination.FANTASY || activeLeagueSubTab != SleeperLeagueSubTab.MATCH) {
@@ -436,9 +465,12 @@ fun NhlFantasyGmAppRoot(vm: MainViewModel) {
                     selectedBottomNav == BottomNavDestination.SCORES -> {
                         ScoresScreen(
                             liveGames = liveGames,
+                            pinnedGameIds = pinnedGameIds,
                             isSyncing = isSyncing,
                             freshness = freshness,
-                            onRefreshScores = { vm.refreshLiveScores() }
+                            onRefreshScores = { vm.refreshLiveScores() },
+                            onTogglePinGame = { vm.togglePinGame(it) },
+                            onUnpinAllGames = { vm.unpinAllGames() }
                         )
                     }
                     selectedBottomNav == BottomNavDestination.PROFILE -> {

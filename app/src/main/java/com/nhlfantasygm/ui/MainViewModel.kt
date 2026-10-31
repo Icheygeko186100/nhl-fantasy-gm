@@ -97,7 +97,8 @@ data class PlayerDetailDialogState(
 
 class MainViewModel(
     val repository: NhlFantasyRepository,
-    val multiplayerCoordinator: MultiplayerCoordinator = MultiplayerCoordinator(repository)
+    val multiplayerCoordinator: MultiplayerCoordinator = MultiplayerCoordinator(repository),
+    val liveGameNotificationManager: com.nhlfantasygm.service.LiveGameNotificationManager? = null
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
@@ -128,6 +129,31 @@ class MainViewModel(
     private var draftTimerJob: Job? = null
 
     val multiplayerState: StateFlow<MultiplayerUiState> = multiplayerCoordinator.uiState
+
+    val pinnedGameIdsState: StateFlow<Set<Long>> = liveGameNotificationManager?.pinnedGameIds
+        ?: MutableStateFlow<Set<Long>>(emptySet()).asStateFlow()
+
+    fun togglePinGame(game: LiveNhlGameEntity) {
+        if (liveGameNotificationManager == null) {
+            _snackbarEvents.tryEmit("Notification manager not ready.")
+            return
+        }
+        val isNowPinned = liveGameNotificationManager.togglePin(game)
+        if (isNowPinned) {
+            _snackbarEvents.tryEmit("📌 Pinned ${game.awayAbbrev} vs ${game.homeAbbrev} to Now Bar.")
+        } else {
+            _snackbarEvents.tryEmit("Unpinned ${game.awayAbbrev} vs ${game.homeAbbrev}.")
+        }
+    }
+
+    fun unpinGame(gameId: Long) {
+        liveGameNotificationManager?.unpinGame(gameId)
+    }
+
+    fun unpinAllGames() {
+        liveGameNotificationManager?.unpinAll()
+        _snackbarEvents.tryEmit("Unpinned all games from Now Bar notifications.")
+    }
 
     val controlledTeamIdState: StateFlow<String> = repository.controlledTeamIdFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NhlFantasyRepository.USER_TEAM_ID)
@@ -1046,12 +1072,13 @@ class MainViewModel(
     companion object {
         fun factory(
             repository: NhlFantasyRepository,
-            multiplayerCoordinator: MultiplayerCoordinator
+            multiplayerCoordinator: MultiplayerCoordinator,
+            liveGameNotificationManager: com.nhlfantasygm.service.LiveGameNotificationManager? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return MainViewModel(repository, multiplayerCoordinator) as T
+                    return MainViewModel(repository, multiplayerCoordinator, liveGameNotificationManager) as T
                 }
             }
     }

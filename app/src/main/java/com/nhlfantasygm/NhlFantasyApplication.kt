@@ -25,6 +25,9 @@ class NhlFantasyApplication : Application(), ImageLoaderFactory {
     lateinit var multiplayerCoordinator: MultiplayerCoordinator
         private set
 
+    lateinit var liveGameNotificationManager: com.nhlfantasygm.service.LiveGameNotificationManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         database = NhlFantasyDatabase.getInstance(this)
@@ -41,6 +44,7 @@ class NhlFantasyApplication : Application(), ImageLoaderFactory {
         )
 
         multiplayerCoordinator = MultiplayerCoordinator(repository = repository)
+        liveGameNotificationManager = com.nhlfantasygm.service.LiveGameNotificationManager(this, repository)
 
         runCatching {
             NhlDataSyncWorker.schedulePeriodicSync(this)
