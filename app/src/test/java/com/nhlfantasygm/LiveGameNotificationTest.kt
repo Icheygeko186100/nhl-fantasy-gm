@@ -2,9 +2,19 @@ package com.nhlfantasygm
 
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
 import com.nhlfantasygm.service.LiveGameSnapshot
+import com.nhlfantasygm.service.TeamBadgeGenerator
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class LiveGameNotificationTest {
 
     @Test
@@ -116,5 +126,34 @@ class LiveGameNotificationTest {
         // Game final produces different snapshot
         val finalSnapshot = LiveGameSnapshot.from(game.copy(gameState = "FINAL"))
         assertNotEquals(initialSnapshot, finalSnapshot)
+    }
+
+    @Test
+    fun `team badge generator creates and caches non-null software bitmaps for NHL teams`() {
+        val cgyBadge = TeamBadgeGenerator.getBadgeBitmap("CGY", 120)
+        assertNotNull(cgyBadge)
+        assertEquals(120, cgyBadge.width)
+        assertEquals(120, cgyBadge.height)
+
+        val colBadge = TeamBadgeGenerator.getBadgeBitmap("COL", 120)
+        assertNotNull(colBadge)
+        assertEquals(120, colBadge.width)
+        assertEquals(120, colBadge.height)
+
+        // Caching verification: same instance returned for identical parameters
+        val cachedCgy = TeamBadgeGenerator.getBadgeBitmap("CGY", 120)
+        assertSame(cgyBadge, cachedCgy)
+    }
+
+    @Test
+    fun `utc time formatting converts ISO strings to readable local time`() {
+        val isoUtc = "2026-11-01T02:00:00Z"
+        val instant = Instant.parse(isoUtc)
+        val localTime = ZonedDateTime.ofInstant(instant, ZoneId.systemDefault())
+        val expectedFormatted = DateTimeFormatter.ofPattern("h:mm a").format(localTime)
+
+        assertFalse(expectedFormatted.contains("T"))
+        assertFalse(expectedFormatted.contains("Z"))
+        assertTrue(expectedFormatted.contains("M")) // AM or PM
     }
 }

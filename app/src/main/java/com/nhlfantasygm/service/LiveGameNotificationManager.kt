@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.nhlfantasygm.MainActivity
@@ -19,6 +20,10 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 
 data class LiveGameSnapshot(
@@ -221,6 +226,18 @@ class LiveGameNotificationManager(
         }
     }
 
+    fun formatStartTime(isoUtc: String): String {
+        if (isoUtc.isBlank()) return "Upcoming"
+        return try {
+            val instant = Instant.parse(isoUtc)
+            val localTime = ZonedDateTime.ofInstant(instant, ZoneId.systemDefault())
+            val formatter = DateTimeFormatter.ofPattern("h:mm a")
+            localTime.format(formatter)
+        } catch (e: Exception) {
+            isoUtc.take(16).replace("T", " ")
+        }
+    }
+
     fun buildNotification(game: LiveNhlGameEntity, ctx: Context): Notification {
         // Tap on notification -> Opens Scores in MainActivity
         val contentIntent = Intent(ctx, MainActivity::class.java).apply {
@@ -259,38 +276,76 @@ class LiveGameNotificationManager(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = when {
-            game.isLive -> "🔴 LIVE ${game.periodLabel} ${game.clockLabel} • ${game.awayAbbrev} ${game.awayScore} - ${game.homeScore} ${game.homeAbbrev}"
-            game.isFinal -> "🏁 FINAL • ${game.awayAbbrev} ${game.awayScore} - ${game.homeScore} ${game.homeAbbrev}"
-            else -> "🏒 ${game.awayAbbrev} @ ${game.homeAbbrev} • ${game.startTimeUtc.takeIf { it.isNotBlank() } ?: "Scheduled"}"
+        // Custom Live Scoreboard RemoteViews (Collapsed & Expanded)
+        val remoteViewsCollapsed = RemoteViews(ctx.packageName, R.layout.notification_live_scoreboard_collapsed)
+        val remoteViewsExpanded = RemoteViews(ctx.packageName, R.layout.notification_live_scoreboard_expanded)
+
+        val awayBadge = TeamBadgeGenerator.getBadgeBitmap(game.awayAbbrev)
+        val homeBadge = TeamBadgeGenerator.getBadgeBitmap(game.homeAbbrev)
+
+        val (statusPillText, statusPillBg, statusSubtext) = when {
+            game.isLive -> {
+                Triple("🔴 LIVE", R.drawable.bg_status_pill_live, "${game.periodLabel} • ${game.clockLabel}")
+            }
+            game.isFinal -> {
+                Triple("FINAL", R.drawable.bg_status_pill_final, "Final Score")
+            }
+            else -> {
+                val timeStr = formatStartTime(game.startTimeUtc)
+                Triple(timeStr, R.drawable.bg_status_pill_scheduled, "Scheduled")
+            }
         }
 
-        val text = when {
-            game.isLive -> "SOG: ${game.awayAbbrev} ${game.awaySog} - ${game.homeAbbrev} ${game.homeSog} • ${game.venueName}"
-            game.isFinal -> "Final • SOG: ${game.awayAbbrev} ${game.awaySog} - ${game.homeAbbrev} ${game.homeSog}"
-            else -> "Starts: ${game.startTimeUtc} • ${game.venueName}"
+        val summaryText = when {
+            game.isLive -> "${game.awayAbbrev}: ${game.awaySog} SOG  •  ${game.homeAbbrev}: ${game.homeSog} SOG"
+            game.isFinal -> "Final  •  ${game.awayAbbrev}: ${game.awaySog} SOG  •  ${game.homeAbbrev}: ${game.homeSog} SOG"
+            else -> game.venueName.takeIf { it.isNotBlank() } ?: "NHL Regular Season"
         }
 
-        val bigText = buildString {
-            append("${game.awayName} (${game.awayAbbrev}): ${game.awayScore}   [${game.awaySog} SOG]\n")
-            append("${game.homeName} (${game.homeAbbrev}): ${game.homeScore}   [${game.homeSog} SOG]\n")
-            val status = when {
-                game.isLive -> "LIVE: ${game.periodLabel} (${game.clockLabel} remaining)"
-                game.isFinal -> "FINAL SCORE"
-                else -> "START TIME: ${game.startTimeUtc.takeIf { it.isNotBlank() } ?: "TBD"}"
-            }
-            append("Status: $status\n")
-            if (game.venueName.isNotBlank()) {
-                append("Arena: ${game.venueName}")
-            }
+        // Bind collapsed view
+        remoteViewsCollapsed.setImageViewBitmap(R.id.iv_away_logo, awayBadge)
+        remoteViewsCollapsed.setTextViewText(R.id.tv_away_abbrev, game.awayAbbrev)
+        remoteViewsCollapsed.setTextViewText(R.id.tv_away_score, game.awayScore.toString())
+        remoteViewsCollapsed.setTextViewText(R.id.tv_status_pill, statusPillText)
+        remoteViewsCollapsed.setInt(R.id.tv_status_pill, "setBackgroundResource", statusPillBg)
+        remoteViewsCollapsed.setTextViewText(R.id.tv_status_subtext, statusSubtext)
+        remoteViewsCollapsed.setTextViewText(R.id.tv_home_score, game.homeScore.toString())
+        remoteViewsCollapsed.setImageViewBitmap(R.id.iv_home_logo, homeBadge)
+        remoteViewsCollapsed.setTextViewText(R.id.tv_home_abbrev, game.homeAbbrev)
+
+        // Bind expanded view
+        remoteViewsExpanded.setImageViewBitmap(R.id.iv_away_logo, awayBadge)
+        remoteViewsExpanded.setTextViewText(R.id.tv_away_abbrev, game.awayAbbrev)
+        remoteViewsExpanded.setTextViewText(R.id.tv_away_score, game.awayScore.toString())
+        remoteViewsExpanded.setTextViewText(R.id.tv_status_pill, statusPillText)
+        remoteViewsExpanded.setInt(R.id.tv_status_pill, "setBackgroundResource", statusPillBg)
+        remoteViewsExpanded.setTextViewText(R.id.tv_status_subtext, statusSubtext)
+        remoteViewsExpanded.setTextViewText(R.id.tv_home_score, game.homeScore.toString())
+        remoteViewsExpanded.setImageViewBitmap(R.id.iv_home_logo, homeBadge)
+        remoteViewsExpanded.setTextViewText(R.id.tv_home_abbrev, game.homeAbbrev)
+        remoteViewsExpanded.setTextViewText(R.id.tv_game_summary, summaryText)
+
+        // Clean fallbacks for system status bar / Now Bar / lockscreen chip
+        val fallbackTitle = when {
+            game.isLive -> "🔴 ${game.awayAbbrev} ${game.awayScore} - ${game.homeScore} ${game.homeAbbrev} • ${game.periodLabel} ${game.clockLabel}"
+            game.isFinal -> "🏁 ${game.awayAbbrev} ${game.awayScore} - ${game.homeScore} ${game.homeAbbrev} • Final"
+            else -> "🏒 ${game.awayAbbrev} @ ${game.homeAbbrev} • ${formatStartTime(game.startTimeUtc)}"
+        }
+
+        val fallbackText = when {
+            game.isLive -> "${game.awayAbbrev} ${game.awaySog} SOG • ${game.homeAbbrev} ${game.homeSog} SOG"
+            game.isFinal -> "Final Score"
+            else -> game.venueName.takeIf { it.isNotBlank() } ?: "Scheduled Matchup"
         }
 
         val builder = NotificationCompat.Builder(ctx, LIVE_GAMES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_live_puck)
-            .setContentTitle(title)
-            .setContentText(text)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(remoteViewsCollapsed)
+            .setCustomBigContentView(remoteViewsExpanded)
+            .setContentTitle(fallbackTitle)
+            .setContentText(fallbackText)
             .setSubText("Live NHL • Now Bar")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

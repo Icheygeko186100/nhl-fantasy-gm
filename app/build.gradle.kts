@@ -25,8 +25,8 @@ android {
         applicationId = "com.nhlfantasygm"
         minSdk = 28
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.4.1"
+        versionCode = 10
+        versionName = "1.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
