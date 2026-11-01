@@ -19,6 +19,33 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentHashMap
+
+data class LiveGameSnapshot(
+    val gameState: String,
+    val periodLabel: String,
+    val clockLabel: String,
+    val awayScore: Int,
+    val homeScore: Int,
+    val awaySog: Int,
+    val homeSog: Int,
+    val isLive: Boolean,
+    val isFinal: Boolean
+) {
+    companion object {
+        fun from(game: LiveNhlGameEntity): LiveGameSnapshot = LiveGameSnapshot(
+            gameState = game.gameState,
+            periodLabel = game.periodLabel,
+            clockLabel = game.clockLabel,
+            awayScore = game.awayScore,
+            homeScore = game.homeScore,
+            awaySog = game.awaySog,
+            homeSog = game.homeSog,
+            isLive = game.isLive,
+            isFinal = game.isFinal
+        )
+    }
+}
 
 class LiveGameNotificationManager(
     private val context: Context,
@@ -28,7 +55,8 @@ class LiveGameNotificationManager(
     companion object {
         const val LIVE_GAMES_CHANNEL_ID = "nhl_live_games_now_bar"
         const val LIVE_GAMES_CHANNEL_NAME = "Live NHL Games & Now Bar"
-        private const val NOTIFICATION_ID_BASE = 50000
+        const val NOTIFICATION_ID_BASE = 50000
+        const val FOREGROUND_FALLBACK_ID = 49999
     }
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -37,7 +65,11 @@ class LiveGameNotificationManager(
     private val _pinnedGameIds = MutableStateFlow<Set<Long>>(emptySet())
     val pinnedGameIds: StateFlow<Set<Long>> = _pinnedGameIds.asStateFlow()
 
+    private val lastNotifiedSnapshots = ConcurrentHashMap<Long, LiveGameSnapshot>()
+    private val lastKnownGameEntities = ConcurrentHashMap<Long, LiveNhlGameEntity>()
+
     private var activePollingJob: Job? = null
+    private var observeJob: Job? = null
 
     init {
         createNotificationChannel()
@@ -50,17 +82,16 @@ class LiveGameNotificationManager(
                 LIVE_GAMES_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Pinned live game scoreboards, period clocks, and shots on goal"
-                enableLights(true)
+                description = "Live NHL scoreboard, period clock, and Now Bar activity"
+                enableLights(false)
                 enableVibration(false)
+                setSound(null, null)
                 setShowBadge(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(channel)
         }
     }
-
-    private var observeJob: Job? = null
 
     private fun startObservingIfPinned() {
         if (_pinnedGameIds.value.isEmpty()) {
@@ -102,7 +133,9 @@ class LiveGameNotificationManager(
     fun pinGame(game: LiveNhlGameEntity, ctx: Context = context) {
         val updated = _pinnedGameIds.value + game.gameId
         _pinnedGameIds.value = updated
-        postOrUpdateNotification(game, ctx)
+        lastKnownGameEntities[game.gameId] = game
+        postOrUpdateNotification(game, ctx, force = true)
+        LiveGameForegroundService.start(ctx, game.gameId)
         startObservingIfPinned()
         checkAndStartLivePolling()
     }
@@ -110,7 +143,13 @@ class LiveGameNotificationManager(
     fun unpinGame(gameId: Long, ctx: Context = context) {
         val updated = _pinnedGameIds.value - gameId
         _pinnedGameIds.value = updated
+        lastNotifiedSnapshots.remove(gameId)
+        lastKnownGameEntities.remove(gameId)
         notificationManager.cancel(getNotificationId(gameId))
+
+        if (updated.isEmpty()) {
+            LiveGameForegroundService.stop(ctx)
+        }
         startObservingIfPinned()
         checkAndStartLivePolling()
     }
@@ -120,10 +159,19 @@ class LiveGameNotificationManager(
             notificationManager.cancel(getNotificationId(id))
         }
         _pinnedGameIds.value = emptySet()
+        lastNotifiedSnapshots.clear()
+        lastKnownGameEntities.clear()
+        LiveGameForegroundService.stop(ctx)
         observeJob?.cancel()
         observeJob = null
         activePollingJob?.cancel()
         activePollingJob = null
+    }
+
+    fun forceRefreshGame(gameId: Long) {
+        lastKnownGameEntities[gameId]?.let { game ->
+            postOrUpdateNotification(game, context, force = true)
+        }
     }
 
     fun updateNotificationsForGames(games: List<LiveNhlGameEntity>) {
@@ -131,12 +179,13 @@ class LiveGameNotificationManager(
         if (pinned.isEmpty()) return
 
         games.filter { it.gameId in pinned }.forEach { game ->
-            postOrUpdateNotification(game, context)
+            lastKnownGameEntities[game.gameId] = game
+            postOrUpdateNotification(game, context, force = false)
         }
         checkAndStartLivePolling(games)
     }
 
-    fun postOrUpdateNotification(game: LiveNhlGameEntity, ctx: Context) {
+    fun postOrUpdateNotification(game: LiveNhlGameEntity, ctx: Context, force: Boolean = false) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val hasPermission = ContextCompat.checkSelfPermission(
                 ctx,
@@ -145,6 +194,34 @@ class LiveGameNotificationManager(
             if (!hasPermission) return
         }
 
+        val snapshot = LiveGameSnapshot.from(game)
+        val previousSnapshot = lastNotifiedSnapshots[game.gameId]
+
+        // State-delta deduplication: if game data hasn't changed, skip notify() completely
+        // to prevent notification flickering or 30-second re-alert spam.
+        if (!force && previousSnapshot == snapshot) {
+            return
+        }
+
+        lastNotifiedSnapshots[game.gameId] = snapshot
+        val notification = buildNotification(game, ctx)
+        notificationManager.notify(getNotificationId(game.gameId), notification)
+    }
+
+    val primaryNotificationId: Int
+        get() = _pinnedGameIds.value.firstOrNull()?.let { getNotificationId(it) } ?: FOREGROUND_FALLBACK_ID
+
+    fun buildPrimaryForegroundNotification(): Notification {
+        val firstGameId = _pinnedGameIds.value.firstOrNull()
+        val game = firstGameId?.let { lastKnownGameEntities[it] }
+        return if (game != null) {
+            buildNotification(game, context)
+        } else {
+            buildFallbackNotification(context)
+        }
+    }
+
+    fun buildNotification(game: LiveNhlGameEntity, ctx: Context): Notification {
         // Tap on notification -> Opens Scores in MainActivity
         val contentIntent = Intent(ctx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -188,7 +265,11 @@ class LiveGameNotificationManager(
             else -> "🏒 ${game.awayAbbrev} @ ${game.homeAbbrev} • ${game.startTimeUtc.takeIf { it.isNotBlank() } ?: "Scheduled"}"
         }
 
-        val text = "SOG: ${game.awayAbbrev} ${game.awaySog} - ${game.homeSog} ${game.homeAbbrev} • ${game.venueName}"
+        val text = when {
+            game.isLive -> "SOG: ${game.awayAbbrev} ${game.awaySog} - ${game.homeAbbrev} ${game.homeSog} • ${game.venueName}"
+            game.isFinal -> "Final • SOG: ${game.awayAbbrev} ${game.awaySog} - ${game.homeAbbrev} ${game.homeSog}"
+            else -> "Starts: ${game.startTimeUtc} • ${game.venueName}"
+        }
 
         val bigText = buildString {
             append("${game.awayName} (${game.awayAbbrev}): ${game.awayScore}   [${game.awaySog} SOG]\n")
@@ -204,7 +285,7 @@ class LiveGameNotificationManager(
             }
         }
 
-        val notification = NotificationCompat.Builder(ctx, LIVE_GAMES_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(ctx, LIVE_GAMES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_live_puck)
             .setContentTitle(title)
             .setContentText(text)
@@ -213,15 +294,51 @@ class LiveGameNotificationManager(
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .addAction(R.drawable.ic_live_puck, "Open Game", contentPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Unpin", unpinPendingIntent)
             .addAction(android.R.drawable.ic_popup_sync, "Refresh", refreshPendingIntent)
-            .build()
 
-        notificationManager.notify(getNotificationId(game.gameId), notification)
+        // Android 16 & Samsung One UI 8 Promoted Ongoing Live Notification extras
+        builder.extras.putBoolean("android.requestPromotedOngoing", true)
+
+        return builder.build()
+    }
+
+    private fun buildFallbackNotification(ctx: Context): Notification {
+        val contentIntent = Intent(ctx, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("NAVIGATE_TAB", "SCORES")
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            ctx,
+            FOREGROUND_FALLBACK_ID,
+            contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(ctx, LIVE_GAMES_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_live_puck)
+            .setContentTitle("🏒 NHL Live Scores Active")
+            .setContentText("Keeping pinned live games updated on Now Bar")
+            .setSubText("Live NHL • Now Bar")
+            .setContentIntent(contentPendingIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+
+        builder.extras.putBoolean("android.requestPromotedOngoing", true)
+        return builder.build()
     }
 
     private fun checkAndStartLivePolling(cachedGames: List<LiveNhlGameEntity>? = null) {
@@ -246,7 +363,7 @@ class LiveGameNotificationManager(
         }
     }
 
-    private fun getNotificationId(gameId: Long): Int {
+    fun getNotificationId(gameId: Long): Int {
         return (NOTIFICATION_ID_BASE + (gameId % 100000L).toInt())
     }
 }

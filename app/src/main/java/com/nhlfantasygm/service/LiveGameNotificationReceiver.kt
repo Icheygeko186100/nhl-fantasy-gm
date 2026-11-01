@@ -29,6 +29,9 @@ class LiveGameNotificationReceiver : BroadcastReceiver() {
             ACTION_REFRESH_GAME -> {
                 CoroutineScope(Dispatchers.IO).launch {
                     app.repository.refreshLiveScoresOnly()
+                    if (gameId > 0) {
+                        app.liveGameNotificationManager.forceRefreshGame(gameId)
+                    }
                 }
             }
         }

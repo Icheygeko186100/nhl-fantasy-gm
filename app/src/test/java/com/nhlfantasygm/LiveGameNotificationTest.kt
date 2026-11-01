@@ -1,6 +1,7 @@
 package com.nhlfantasygm
 
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
+import com.nhlfantasygm.service.LiveGameSnapshot
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -70,5 +71,50 @@ class LiveGameNotificationTest {
         // Unpin all
         pinned.clear()
         assertTrue(pinned.isEmpty())
+    }
+
+    @Test
+    fun `snapshot equality deduplication prevents re-notifying unchanged game states`() {
+        val game = LiveNhlGameEntity(
+            gameId = 2024020200L,
+            gameDate = "2026-10-31",
+            gameState = "LIVE",
+            periodLabel = "1st",
+            clockLabel = "10:00",
+            awayAbbrev = "TOR",
+            awayName = "Toronto Maple Leafs",
+            awayScore = 1,
+            awaySog = 10,
+            awayLogoUrl = "",
+            homeAbbrev = "MTL",
+            homeName = "Montreal Canadiens",
+            homeScore = 0,
+            homeSog = 8,
+            homeLogoUrl = "",
+            startTimeUtc = "7:00 PM EST",
+            venueName = "Bell Centre"
+        )
+
+        val initialSnapshot = LiveGameSnapshot.from(game)
+        val sameDataSnapshot = LiveGameSnapshot.from(game)
+
+        // Identical data produces equal snapshots -> skips notify()
+        assertEquals(initialSnapshot, sameDataSnapshot)
+
+        // Score change produces different snapshot -> triggers live update
+        val scoreUpdateSnapshot = LiveGameSnapshot.from(game.copy(awayScore = 2))
+        assertNotEquals(initialSnapshot, scoreUpdateSnapshot)
+
+        // Period/clock update produces different snapshot
+        val clockUpdateSnapshot = LiveGameSnapshot.from(game.copy(clockLabel = "09:30"))
+        assertNotEquals(initialSnapshot, clockUpdateSnapshot)
+
+        // SOG update produces different snapshot
+        val sogUpdateSnapshot = LiveGameSnapshot.from(game.copy(awaySog = 11))
+        assertNotEquals(initialSnapshot, sogUpdateSnapshot)
+
+        // Game final produces different snapshot
+        val finalSnapshot = LiveGameSnapshot.from(game.copy(gameState = "FINAL"))
+        assertNotEquals(initialSnapshot, finalSnapshot)
     }
 }

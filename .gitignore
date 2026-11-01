@@ -12,4 +12,6 @@ keystore/
 captures/
 .externalNativeBuild/
 .cxx/
+.kotlin/
+.agents/teamwork/
 
