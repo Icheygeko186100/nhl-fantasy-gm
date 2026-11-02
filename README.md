@@ -1,6 +1,6 @@
 # NHL Fantasy GM — Ultimate Fantasy Hockey Simulator (Android)
 
-**NHL Fantasy GM** (`v1.1.0`) is a native Kotlin & Jetpack Compose Android hockey general-manager simulator built for **Android 16 / One UI 8 (API 36)** and optimized for high-density displays such as the **Samsung Galaxy S22 Ultra** — featuring both **Single-Player vs Smart CPU GMs** and **Real-Time Multiplayer Drafts, Invites & Leagues with Friends**.
+**NHL Fantasy GM** (`v1.4.3`) is a native Kotlin & Jetpack Compose Android hockey general-manager simulator that **works on any Android phone running Android 12 or newer (API 31–36, Android 12 through Android 16)** — featuring **Single-Player vs Smart CPU GMs**, **Real-Time Multiplayer Drafts, Invites & Leagues with Friends**, and **Live Scoreboard Notifications**.
 
 > **Simulation & No-Gambling Notice:** All financial balances, player prices, contracts, and matchup rewards use **fictional Virtual Canadian Dollars (CAD)** (`$100,000,000 CAD` default starting treasury). There is **zero** real-money gambling, wagering, deposits, withdrawals, or paid player purchases.
 
@@ -27,8 +27,8 @@ Real players can invite friends to join their draft and play together across And
 
 ## 2. Architecture & Technology Stack
 
-- **Language & UI:** 100% Kotlin (`2.0.21`) + Jetpack Compose (Material 3, custom `Canvas` hockey crests and statistical charts, edge-to-edge One UI 8 layout).
-- **Target / Compile SDK:** `compileSdk = 36`, `targetSdk = 36` (Android 16), `minSdk = 28`.
+- **Language & UI:** 100% Kotlin (`2.0.21`) + Jetpack Compose (Material 3, custom `Canvas` hockey crests and statistical charts, edge-to-edge layout across all Android 12+ devices).
+- **Device Compatibility:** Works on **any Android phone running Android 12 or newer** (`minSdk = 31`, `targetSdk = 36`, `compileSdk = 36` — Android 12, 13, 14, 15, and 16).
 - **Architecture:** Clean separation across:
   - `multiplayer` — `RoomCrypto` (`AES-256-GCM` + `GZIP` + `nhlfantasygm://join` deep links), `MqttPacketCodec` & `MqttWebSocketTransport` / `CustomRelayWebSocketTransport`, and `MultiplayerCoordinator` (authoritative Host & Guest state synchronization).
   - `data/remote` — OkHttp + Kotlinx Serialization clients for official NHL and public hockey feeds with concurrency throttling and error recovery.
@@ -66,17 +66,17 @@ No API keys are embedded in the APK, and **no paid subscription or API key is re
 
 ---
 
-## 4. Installing the APK on Samsung Galaxy S22 Ultra (Android 16 / One UI 8)
+## 4. Installing the APK on Any Android Phone (Android 12+)
 
 ### APK Output Paths
-- Release Output Directory: `release/NHLFantasyGM-v1.1.0-release.apk`
+- GitHub Releases: `app-release.apk`
 - Gradle Build Output: `app/build/outputs/apk/release/app-release.apk`
 
-### Option A — Direct Phone Install (USB Copy / GitHub Release)
-1. Download `NHLFantasyGM-v1.1.0-release.apk` (signed with the same release certificate as `v1.0.0`, so it upgrades seamlessly in-place while preserving your data).
-2. Open Samsung **My Files** → **Downloads** and tap `NHLFantasyGM-v1.1.0-release.apk`.
-3. If prompted by One UI 8 / Android 16 security:
-   - Tap **Settings** → enable **Allow from this source** for *My Files* (if **Auto Blocker** is enabled under *Settings → Security and privacy → Auto Blocker*, temporarily toggle Auto Blocker off during sideloading, then re-enable it afterward).
+### Option A — Direct Phone Install (GitHub Release / File Manager)
+1. Download `app-release.apk` from the latest GitHub Release on any Android phone running **Android 12 or newer** (Google Pixel, Samsung Galaxy, Motorola, OnePlus, Xiaomi, etc.).
+2. Open your phone's **Files** / **Downloads** app and tap `app-release.apk`.
+3. If prompted by Android security:
+   - Tap **Settings** → enable **Allow from this source** for your browser or file manager (on Samsung phones with **Auto Blocker**, temporarily toggle Auto Blocker off under *Settings → Security and privacy → Auto Blocker* during sideloading).
 4. Tap **Install** (or **Update**), then tap **Open**.
 
 ### Option B — Install via ADB over USB

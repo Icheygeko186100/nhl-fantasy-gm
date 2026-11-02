@@ -59,7 +59,7 @@ class LiveGameNotificationManager(
 
     companion object {
         const val LIVE_GAMES_CHANNEL_ID = "nhl_live_games_now_bar"
-        const val LIVE_GAMES_CHANNEL_NAME = "Live NHL Games & Now Bar"
+        const val LIVE_GAMES_CHANNEL_NAME = "Live NHL Game Scores"
         const val NOTIFICATION_ID_BASE = 50000
         const val FOREGROUND_FALLBACK_ID = 49999
     }
@@ -345,7 +345,7 @@ class LiveGameNotificationManager(
             .setCustomBigContentView(remoteViewsExpanded)
             .setContentTitle(fallbackTitle)
             .setContentText(fallbackText)
-            .setSubText("Live NHL • Now Bar")
+            .setSubText("Live NHL")
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -380,8 +380,8 @@ class LiveGameNotificationManager(
         val builder = NotificationCompat.Builder(ctx, LIVE_GAMES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_live_puck)
             .setContentTitle("🏒 NHL Live Scores Active")
-            .setContentText("Keeping pinned live games updated on Now Bar")
-            .setSubText("Live NHL • Now Bar")
+            .setContentText("Keeping pinned live games updated in real time")
+            .setSubText("Live NHL")
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

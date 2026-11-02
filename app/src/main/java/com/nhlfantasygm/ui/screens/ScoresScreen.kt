@@ -99,7 +99,7 @@ fun ScoresScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "Pin live games to Android notifications & Now Bar",
+                        text = "Pin live games to Android notifications & lockscreen (Android 12+)",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF7E8B9F)
                     )
@@ -153,7 +153,7 @@ fun ScoresScreen(
                                     .background(ProfitEmerald)
                             )
                             Text(
-                                text = "📌 ${pinnedGameIds.size} Game${if (pinnedGameIds.size > 1) "s" else ""} Pinned to Now Bar",
+                                text = "📌 ${pinnedGameIds.size} Game${if (pinnedGameIds.size > 1) "s" else ""} Pinned to Live Notifications",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Black,
                                 color = ProfitEmerald
@@ -281,7 +281,7 @@ private fun NhlGameScorecard(
                         text = when {
                             isLive -> "LIVE • ${if (game.periodLabel.isNotBlank()) game.periodLabel else "In Progress"} ${game.clockLabel}"
                             isFinal -> "FINAL"
-                            else -> game.startTimeUtc.takeIf { it.isNotBlank() } ?: "SCHEDULED"
+                            else -> formatCardStartTime(game.startTimeUtc)
                         },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold,
@@ -396,12 +396,12 @@ private fun NhlGameScorecard(
                     ) {
                         Icon(
                             imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (isPinned) "Unpin from Now Bar" else "Pin to Now Bar",
+                            contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
                             tint = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = if (isPinned) "Pinned • Now Bar" else "Pin to Now Bar",
+                            text = if (isPinned) "Pinned • Live" else "Pin Live Score",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = if (isPinned) ProfitEmerald else Color(0xFF00E5FF)
@@ -410,5 +410,17 @@ private fun NhlGameScorecard(
                 }
             }
         }
+    }
+}
+
+private fun formatCardStartTime(isoUtc: String): String {
+    if (isoUtc.isBlank()) return "SCHEDULED"
+    return try {
+        val instant = java.time.Instant.parse(isoUtc)
+        val localTime = java.time.ZonedDateTime.ofInstant(instant, java.time.ZoneId.systemDefault())
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+        localTime.format(formatter)
+    } catch (e: Exception) {
+        isoUtc.take(16).replace("T", " ")
     }
 }

@@ -563,12 +563,12 @@ fun SettingsScreen(
                         color = IceCyan
                     )
                     Text(
-                        text = "Version 1.1.1 (Multiplayer & Solo GM Simulator)",
+                        text = "Version ${com.nhlfantasygm.BuildConfig.VERSION_NAME} (Multiplayer & Solo GM Simulator)",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "Built for Android 16 / One UI 8 • 32 NHL Teams • Real-time Stats Engine",
+                        text = "Works with any Android phone (Android 12+ minimum) • 32 NHL Teams • Real-time Stats Engine",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

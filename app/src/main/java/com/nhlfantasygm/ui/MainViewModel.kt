@@ -140,7 +140,7 @@ class MainViewModel(
         }
         val isNowPinned = liveGameNotificationManager.togglePin(game)
         if (isNowPinned) {
-            _snackbarEvents.tryEmit("📌 Pinned ${game.awayAbbrev} vs ${game.homeAbbrev} to Now Bar.")
+            _snackbarEvents.tryEmit("📌 Pinned ${game.awayAbbrev} vs ${game.homeAbbrev} to Live Notifications.")
         } else {
             _snackbarEvents.tryEmit("Unpinned ${game.awayAbbrev} vs ${game.homeAbbrev}.")
         }
@@ -152,7 +152,7 @@ class MainViewModel(
 
     fun unpinAllGames() {
         liveGameNotificationManager?.unpinAll()
-        _snackbarEvents.tryEmit("Unpinned all games from Now Bar notifications.")
+        _snackbarEvents.tryEmit("Unpinned all games from Live Notifications.")
     }
 
     val controlledTeamIdState: StateFlow<String> = repository.controlledTeamIdFlow
