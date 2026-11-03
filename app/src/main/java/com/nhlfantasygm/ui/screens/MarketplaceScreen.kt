@@ -1,4 +1,4 @@
-package com.nhlfantasygm.ui.screens
+﻿package com.nhlfantasygm.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke

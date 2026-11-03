@@ -1,4 +1,4 @@
-package com.nhlfantasygm.model
+﻿package com.nhlfantasygm.model
 
 import kotlinx.serialization.Serializable
 import java.text.NumberFormat

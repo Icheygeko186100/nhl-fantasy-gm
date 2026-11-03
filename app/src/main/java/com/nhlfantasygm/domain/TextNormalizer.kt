@@ -1,4 +1,4 @@
-package com.nhlfantasygm.domain
+﻿package com.nhlfantasygm.domain
 
 import java.text.Normalizer
 import java.time.LocalDate

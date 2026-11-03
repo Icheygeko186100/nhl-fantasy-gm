@@ -1,4 +1,4 @@
-package com.nhlfantasygm.multiplayer
+﻿package com.nhlfantasygm.multiplayer
 
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
 import com.nhlfantasygm.domain.DraftEngine

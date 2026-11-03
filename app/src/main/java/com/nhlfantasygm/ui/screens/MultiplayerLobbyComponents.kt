@@ -1,4 +1,4 @@
-package com.nhlfantasygm.ui.screens
+﻿package com.nhlfantasygm.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager

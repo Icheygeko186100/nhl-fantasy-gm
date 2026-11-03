@@ -1,4 +1,4 @@
-package com.nhlfantasygm.multiplayer
+﻿package com.nhlfantasygm.multiplayer
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream

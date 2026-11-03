@@ -1,6 +1,11 @@
-package com.nhlfantasygm.ui.components
+﻿package com.nhlfantasygm.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,7 +46,7 @@ enum class SleeperLeagueSubTab(val label: String) {
  *
  * Tab row:
  *   MATCH        TEAM        PLAYERS        LEAGUE
- *   (with underline indicator on the active tab)
+ *   (with smooth animated underline indicator and spring scale on the active tab)
  *
  * Built with statusBarsPadding() so it is strictly protected from notch / status bar overlap on
  * Samsung Galaxy S22 Ultra and Android 16.
@@ -135,7 +141,29 @@ fun SleeperLeagueHeader(
                     val isSelected = tab == activeSubTab
                     val textColor by animateColorAsState(
                         targetValue = if (isSelected) Color.White else Color(0xFF7E8B9F),
+                        animationSpec = tween(180),
                         label = "tabText"
+                    )
+                    val textScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.05f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "tabScale"
+                    )
+                    val indicatorWidth by animateDpAsState(
+                        targetValue = if (isSelected) 38.dp else 0.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "tabIndicatorWidth"
+                    )
+                    val indicatorAlpha by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0f,
+                        animationSpec = tween(180),
+                        label = "tabIndicatorAlpha"
                     )
 
                     Column(
@@ -152,15 +180,16 @@ fun SleeperLeagueHeader(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
                             color = textColor,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.scale(textScale)
                         )
                         Spacer(Modifier.height(5.dp))
                         Box(
                             modifier = Modifier
-                                .width(if (isSelected) 38.dp else 0.dp)
+                                .width(indicatorWidth)
                                 .height(3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .background(Color.White.copy(alpha = indicatorAlpha))
                         )
                     }
                 }

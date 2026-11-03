@@ -1,4 +1,4 @@
-package com.nhlfantasygm.service
+﻿package com.nhlfantasygm.service
 
 import android.graphics.Bitmap
 import android.graphics.Canvas

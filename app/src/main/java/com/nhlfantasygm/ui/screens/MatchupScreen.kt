@@ -1,5 +1,10 @@
 package com.nhlfantasygm.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -492,12 +497,23 @@ private fun SleeperMatchupHeroCard(
                 ) {
                     repeat(matchupCount) { idx ->
                         val isCurrent = idx == currentMatchupIndex
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (isCurrent) 14.dp else 6.dp,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                            label = "carouselDotWidth"
+                        )
+                        val dotColor by animateColorAsState(
+                            targetValue = if (isCurrent) Color(0xFF00E5FF) else Color(0xFF334155),
+                            animationSpec = tween(180),
+                            label = "carouselDotColor"
+                        )
                         Box(
                             modifier = Modifier
                                 .padding(horizontal = 3.dp)
-                                .size(if (isCurrent) 7.dp else 5.dp)
+                                .height(6.dp)
+                                .width(dotWidth)
                                 .clip(CircleShape)
-                                .background(if (isCurrent) Color(0xFF00E5FF) else Color(0xFF334155))
+                                .background(dotColor)
                                 .clickable { onSelectMatchupIndex(idx) }
                         )
                     }

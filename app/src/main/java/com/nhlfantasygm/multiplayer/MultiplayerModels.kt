@@ -1,4 +1,4 @@
-package com.nhlfantasygm.multiplayer
+﻿package com.nhlfantasygm.multiplayer
 
 import com.nhlfantasygm.data.local.*
 import com.nhlfantasygm.model.DraftConfig

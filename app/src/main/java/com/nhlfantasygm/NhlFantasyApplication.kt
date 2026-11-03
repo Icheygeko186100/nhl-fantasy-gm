@@ -1,4 +1,4 @@
-package com.nhlfantasygm
+﻿package com.nhlfantasygm
 
 import android.app.Application
 import coil.ImageLoader

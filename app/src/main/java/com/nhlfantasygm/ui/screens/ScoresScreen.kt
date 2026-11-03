@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -30,9 +31,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
 import com.nhlfantasygm.model.DataFreshnessState
-import com.nhlfantasygm.ui.components.NhlTeamBadge
+import com.nhlfantasygm.ui.components.*
 import com.nhlfantasygm.ui.theme.*
 
 @Composable
@@ -273,12 +279,7 @@ private fun NhlGameScorecard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (isLive) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(ProfitEmerald)
-                        )
+                        LivePulseDot(color = ProfitEmerald, size = 8.dp)
                     }
                     Text(
                         text = when {
@@ -403,6 +404,17 @@ private fun NhlGameScorecard(
                         }
                     }
                 } else {
+                    val pinScale by animateFloatAsState(
+                        targetValue = if (isPinned) 1.08f else 1.0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                        label = "pinScale"
+                    )
+                    val pinColor by animateColorAsState(
+                        targetValue = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
+                        animationSpec = tween(180),
+                        label = "pinColor"
+                    )
+
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = if (isPinned) ProfitEmerald.copy(alpha = 0.18f) else Color(0xFF1E293B),
@@ -410,7 +422,7 @@ private fun NhlGameScorecard(
                             1.dp,
                             if (isPinned) ProfitEmerald else Color(0xFF00E5FF).copy(alpha = 0.5f)
                         ),
-                        modifier = Modifier.clickable { onTogglePin() }
+                        modifier = Modifier.bouncingClickable { onTogglePin() }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
@@ -420,14 +432,16 @@ private fun NhlGameScorecard(
                             Icon(
                                 imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
                                 contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
-                                tint = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
-                                modifier = Modifier.size(13.dp)
+                                tint = pinColor,
+                                modifier = Modifier
+                                    .size(13.dp)
+                                    .scale(pinScale)
                             )
                             Text(
                                 text = if (isPinned) "Pinned • Live" else "Pin Live Score",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isPinned) ProfitEmerald else Color(0xFF00E5FF)
+                                color = pinColor
                             )
                         }
                     }

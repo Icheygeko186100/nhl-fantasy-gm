@@ -1,4 +1,4 @@
-package com.nhlfantasygm.data.remote
+﻿package com.nhlfantasygm.data.remote
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

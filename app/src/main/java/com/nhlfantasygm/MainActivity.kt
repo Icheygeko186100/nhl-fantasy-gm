@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -312,13 +315,22 @@ fun NhlFantasyGmAppRoot(
                     ) {
                         BottomNavDestination.entries.forEach { dest ->
                             val selected = selectedBottomNav == dest
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (selected) 1.15f else 1.0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "navIconScale"
+                            )
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { selectedBottomNav = dest },
                                 icon = {
                                     Icon(
                                         imageVector = dest.icon,
-                                        contentDescription = dest.label
+                                        contentDescription = dest.label,
+                                        modifier = Modifier.scale(iconScale)
                                     )
                                 },
                                 label = {
@@ -346,8 +358,21 @@ fun NhlFantasyGmAppRoot(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                when {
-                    activeOverlay == "DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN" -> {
+                val currentScreenKey: Any = activeOverlay ?: selectedBottomNav
+                AnimatedContent(
+                    targetState = currentScreenKey,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(200, easing = LinearOutSlowInEasing)) +
+                            scaleIn(initialScale = 0.98f, animationSpec = tween(200, easing = LinearOutSlowInEasing)))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                            )
+                    },
+                    label = "mainScreenTransition",
+                    modifier = Modifier.fillMaxSize()
+                ) { screenKey ->
+                    when (screenKey) {
+                        "DRAFT", "MULTIPLAYER_DRAFT", "MULTIPLAYER_DRAFT_JOIN" -> {
                         DraftScreen(
                             draftSession = draftSession,
                             draftConfig = vm.repository.decodeDraftConfig(draftSession),
@@ -392,7 +417,7 @@ fun NhlFantasyGmAppRoot(
                             onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                         )
                     }
-                    activeOverlay == "SETTINGS" -> {
+                    "SETTINGS" -> {
                         SettingsScreen(
                             settings = settings,
                             mpState = mpState,
@@ -410,7 +435,7 @@ fun NhlFantasyGmAppRoot(
                             onLeaveMultiplayerRoom = { vm.leaveMultiplayerRoom() }
                         )
                     }
-                    selectedBottomNav == BottomNavDestination.HOME -> {
+                    BottomNavDestination.HOME -> {
                         HomeScreen(
                             humanTeam = humanTeam,
                             financialSummary = financials,
@@ -462,7 +487,7 @@ fun NhlFantasyGmAppRoot(
                             onSimulateNextWeek = { vm.simulateNextWeek() }
                         )
                     }
-                    selectedBottomNav == BottomNavDestination.SCORES -> {
+                    BottomNavDestination.SCORES -> {
                         ScoresScreen(
                             liveGames = liveGames,
                             pinnedGameIds = pinnedGameIds,
@@ -473,7 +498,7 @@ fun NhlFantasyGmAppRoot(
                             onUnpinAllGames = { vm.unpinAllGames() }
                         )
                     }
-                    selectedBottomNav == BottomNavDestination.PROFILE -> {
+                    BottomNavDestination.PROFILE -> {
                         ProfileScreen(
                             humanTeam = humanTeam,
                             financials = financials,
@@ -484,9 +509,32 @@ fun NhlFantasyGmAppRoot(
                             onRefreshData = { vm.triggerFullSync(silentIfCached = false) }
                         )
                     }
-                    selectedBottomNav == BottomNavDestination.FANTASY -> {
-                        when (activeLeagueSubTab) {
-                            SleeperLeagueSubTab.MATCH -> {
+                    BottomNavDestination.FANTASY -> {
+                        AnimatedContent(
+                            targetState = activeLeagueSubTab,
+                            transitionSpec = {
+                                val forward = targetState.ordinal > initialState.ordinal
+                                if (forward) {
+                                    (slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { it / 5 } +
+                                        fadeIn(animationSpec = tween(200)))
+                                        .togetherWith(
+                                            slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { -it / 5 } +
+                                                fadeOut(animationSpec = tween(150))
+                                        )
+                                } else {
+                                    (slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { -it / 5 } +
+                                        fadeIn(animationSpec = tween(200)))
+                                        .togetherWith(
+                                            slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { it / 5 } +
+                                                fadeOut(animationSpec = tween(150))
+                                        )
+                                }
+                            },
+                            label = "leagueSubTabTransition",
+                            modifier = Modifier.fillMaxSize()
+                        ) { subTab ->
+                            when (subTab) {
+                                SleeperLeagueSubTab.MATCH -> {
                                 MatchupScreen(
                                     matchups = matchups,
                                     fantasyTeams = fantasyTeams,
@@ -572,8 +620,62 @@ fun NhlFantasyGmAppRoot(
                             }
                         }
                     }
+                    }
+                    else -> {
+                        HomeScreen(
+                            humanTeam = humanTeam,
+                            financialSummary = financials,
+                            rosterAnalytics = rosterAnalytics,
+                            freshnessState = freshness,
+                            syncStatus = syncStatus,
+                            isSyncing = isSyncing,
+                            liveGames = liveGames,
+                            allScoredPlayers = allScoredPlayers,
+                            fantasyTeams = fantasyTeams,
+                            matchups = matchups,
+                            newsHeadlines = newsHeadlines,
+                            mpState = mpState,
+                            onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
+                            onPlayerClick = { vm.openPlayerDetail(it) },
+                            onNavigateMainTab = { target ->
+                                when (target) {
+                                    0 -> selectedBottomNav = BottomNavDestination.HOME
+                                    1 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.MATCH
+                                    }
+                                    2 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.TEAM
+                                    }
+                                    3 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.PLAYERS
+                                    }
+                                    4 -> {
+                                        selectedBottomNav = BottomNavDestination.FANTASY
+                                        activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
+                                    }
+                                    5 -> {
+                                        activeOverlay = if (mpState.pendingDeepLinkCode.isNotBlank()) "MULTIPLAYER_DRAFT_JOIN"
+                                        else if (mpState.isMultiplayerActive) "MULTIPLAYER_DRAFT"
+                                        else "DRAFT"
+                                    }
+                                    6 -> activeOverlay = "SETTINGS"
+                                    7 -> activeOverlay = "MULTIPLAYER_DRAFT"
+                                }
+                            },
+                            onNavigateLeagueSubTab = {
+                                vm.setLeagueTab(it)
+                                selectedBottomNav = BottomNavDestination.FANTASY
+                                activeLeagueSubTab = SleeperLeagueSubTab.LEAGUE
+                            },
+                            onSimulateNextWeek = { vm.simulateNextWeek() }
+                        )
+                    }
                 }
             }
+        }
         }
 
         // Omni Instant Player Search Modal

@@ -1,4 +1,4 @@
-package com.nhlfantasygm.ui.components
+﻿package com.nhlfantasygm.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable

@@ -93,7 +93,7 @@ fun HomeScreen(
                     border = BorderStroke(1.2.dp, IceCyan.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateMainTab(1) }
+                        .bouncingClickable { onNavigateMainTab(1) }
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -255,7 +255,9 @@ fun HomeScreen(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                modifier = Modifier.clickable { onNavigateMainTab(4) }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bouncingClickable { onNavigateMainTab(4) }
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -328,7 +330,7 @@ fun HomeScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onNavigateMainTab(2) }
+                    .bouncingClickable { onNavigateMainTab(2) }
             ) {
                 Row(
                     modifier = Modifier
@@ -618,7 +620,7 @@ private fun LiveNhlGameCard(
     Surface(
         modifier = Modifier
             .width(195.dp)
-            .clickable { onClick() },
+            .bouncingClickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, borderColor)
@@ -632,12 +634,27 @@ private fun LiveNhlGameCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (game.isLive) "● LIVE ${game.periodLabel} ${game.clockLabel}" else game.periodLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (game.isLive) ProfitEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.ExtraBold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (game.isLive) {
+                        LivePulseDot(color = ProfitEmerald, size = 6.dp)
+                        Text(
+                            text = "LIVE ${game.periodLabel} ${game.clockLabel}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ProfitEmerald,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    } else {
+                        Text(
+                            text = game.periodLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 Text(
                     text = game.gameDate.takeLast(5),
                     style = MaterialTheme.typography.labelSmall,
@@ -682,7 +699,7 @@ private fun TopPerformerCompactCard(
     Surface(
         modifier = Modifier
             .width(168.dp)
-            .clickable { onClick() },
+            .bouncingClickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)

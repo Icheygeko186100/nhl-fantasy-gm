@@ -1,4 +1,4 @@
-package com.nhlfantasygm.ui
+﻿package com.nhlfantasygm.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider

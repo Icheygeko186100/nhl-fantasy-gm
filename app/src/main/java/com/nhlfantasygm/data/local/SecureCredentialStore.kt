@@ -1,4 +1,4 @@
-package com.nhlfantasygm.data.local
+﻿package com.nhlfantasygm.data.local
 
 import android.content.Context
 import android.content.SharedPreferences

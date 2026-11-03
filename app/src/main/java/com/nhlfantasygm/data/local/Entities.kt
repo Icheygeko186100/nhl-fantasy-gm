@@ -1,4 +1,4 @@
-package com.nhlfantasygm.data.local
+﻿package com.nhlfantasygm.data.local
 
 import androidx.room.Entity
 import androidx.room.Index

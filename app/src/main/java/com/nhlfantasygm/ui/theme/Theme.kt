@@ -1,4 +1,4 @@
-package com.nhlfantasygm.ui.theme
+﻿package com.nhlfantasygm.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

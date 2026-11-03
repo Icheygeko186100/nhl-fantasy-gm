@@ -1,4 +1,4 @@
-package com.nhlfantasygm.domain
+﻿package com.nhlfantasygm.domain
 
 import com.nhlfantasygm.data.local.FantasyTeamEntity
 import com.nhlfantasygm.data.local.PlayerEntity

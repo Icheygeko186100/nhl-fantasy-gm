@@ -1,4 +1,4 @@
-package com.nhlfantasygm.worker
+﻿package com.nhlfantasygm.worker
 
 import android.content.Context
 import androidx.work.Constraints

@@ -1,4 +1,4 @@
-package com.nhlfantasygm.model
+﻿package com.nhlfantasygm.model
 
 enum class LineupGroup(val title: String) {
     FORWARD_LINE_1("Forward Line 1"),

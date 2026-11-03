@@ -1,10 +1,13 @@
-package com.nhlfantasygm.ui.components
+﻿package com.nhlfantasygm.ui.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,9 +15,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,6 +41,86 @@ import com.nhlfantasygm.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/**
+ * Animated pulsing dot indicator for live games and active connections.
+ */
+@Composable
+fun LivePulseDot(
+    color: Color = ProfitEmerald,
+    size: Dp = 8.dp,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "livePulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 2.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseAlpha"
+    )
+
+    Box(
+        modifier = modifier.size(size * 2),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .scale(pulseScale)
+                .clip(CircleShape)
+                .background(color.copy(alpha = pulseAlpha))
+        )
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(color)
+        )
+    }
+}
+
+/**
+ * Interactive tactile scale animation on press feedback.
+ */
+@Composable
+fun Modifier.bouncingClickable(
+    enabled: Boolean = true,
+    scaleDownFactor: Float = 0.96f,
+    onClick: () -> Unit
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) scaleDownFactor else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "bouncingClickScale"
+    )
+
+    return this
+        .scale(scale)
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled,
+            onClick = onClick
+        )
+}
 
 @Composable
 fun DataFreshnessBanner(
@@ -79,12 +165,16 @@ fun DataFreshnessBanner(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(badgeColor)
-                )
+                if (freshness == DataFreshnessState.LIVE) {
+                    LivePulseDot(color = badgeColor, size = 8.dp)
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(badgeColor)
+                    )
+                }
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
