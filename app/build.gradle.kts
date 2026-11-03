@@ -25,8 +25,8 @@ android {
         applicationId = "com.nhlfantasygm"
         minSdk = 31
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.4.4"
+        versionCode = 13
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -86,6 +86,9 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
+            all {
+                it.maxHeapSize = "2g"
+            }
         }
     }
 

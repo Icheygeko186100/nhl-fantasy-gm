@@ -90,9 +90,14 @@ fun HomeScreen(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.2.dp, IceCyan.copy(alpha = 0.5f)),
+                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .liquidGlassSurface(
+                            shape = RoundedCornerShape(16.dp),
+                            cornerRadius = 16.dp,
+                            enableShader = true
+                        )
                         .clickable { onNavigateMainTab(1) }
                 ) {
                     Column(

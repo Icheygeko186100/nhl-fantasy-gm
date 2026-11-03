@@ -31,7 +31,10 @@ import com.nhlfantasygm.ui.components.SleeperLeagueHeader
 import com.nhlfantasygm.ui.components.SleeperLeagueSubTab
 import com.nhlfantasygm.ui.components.SleeperStandardHeader
 import com.nhlfantasygm.ui.screens.*
+import com.nhlfantasygm.ui.theme.LiquidGlassBackdrop
+import com.nhlfantasygm.ui.theme.LocalLiquidGlassEnabled
 import com.nhlfantasygm.ui.theme.NhlFantasyGmTheme
+import com.nhlfantasygm.ui.theme.liquidGlassBar
 import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class BottomNavDestination(val index: Int, val label: String, val icon: ImageVector) {
@@ -205,142 +208,148 @@ fun NhlFantasyGmAppRoot(
     }
 
     NhlFantasyGmTheme(themeMode = settings.themeMode) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            topBar = {
-                when (activeOverlay) {
-                    "DRAFT", "MULTIPLAYER_DRAFT", "MULTIPLAYER_DRAFT_JOIN" -> {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding(),
-                            color = Color(0xFF0D1424),
-                            border = BorderStroke(1.dp, Color(0xFF1E293B))
-                        ) {
-                            Row(
+        val isLiquidGlass = LocalLiquidGlassEnabled.current
+        LiquidGlassBackdrop {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.background,
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                topBar = {
+                    when (activeOverlay) {
+                        "DRAFT", "MULTIPLAYER_DRAFT", "MULTIPLAYER_DRAFT_JOIN" -> {
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(52.dp)
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .liquidGlassBar()
+                                    .statusBarsPadding(),
+                                color = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                             ) {
-                                IconButton(onClick = { activeOverlay = null }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                                }
-                                Text(
-                                    text = if (activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN") "Multiplayer Draft & Lobby" else "Draft Room & Multiplayer Lobby",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                    "SETTINGS" -> {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding(),
-                            color = Color(0xFF0D1424),
-                            border = BorderStroke(1.dp, Color(0xFF1E293B))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { activeOverlay = null }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                                }
-                                Text(
-                                    text = "League Settings & Rules",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                    else -> {
-                        when (selectedBottomNav) {
-                            BottomNavDestination.FANTASY -> {
-                                SleeperLeagueHeader(
-                                    leagueTitle = "${humanTeam?.teamName ?: "Northern Ice"} League",
-                                    team = humanTeam,
-                                    activeSubTab = activeLeagueSubTab,
-                                    onSelectSubTab = { activeLeagueSubTab = it },
-                                    onOpenSettings = { activeOverlay = "SETTINGS" },
-                                    onBackClick = { selectedBottomNav = BottomNavDestination.HOME }
-                                )
-                            }
-                            BottomNavDestination.HOME -> {
-                                SleeperStandardHeader(
-                                    title = "NHL Fantasy GM",
-                                    subtitle = "${humanTeam?.teamName ?: "My Franchise"} • ${humanTeam?.wins ?: 0}W - ${humanTeam?.losses ?: 0}L",
-                                    team = humanTeam,
-                                    onOpenSettings = { activeOverlay = "SETTINGS" }
-                                )
-                            }
-                            BottomNavDestination.SCORES -> {
-                                SleeperStandardHeader(
-                                    title = "NHL Live Scores",
-                                    subtitle = "Real-time NHL game stats & standings",
-                                    team = null,
-                                    onOpenSettings = { activeOverlay = "SETTINGS" }
-                                )
-                            }
-                            BottomNavDestination.PROFILE -> {
-                                SleeperStandardHeader(
-                                    title = "GM Franchise Profile",
-                                    subtitle = humanTeam?.teamName ?: "Manager",
-                                    team = humanTeam,
-                                    onOpenSettings = { activeOverlay = "SETTINGS" }
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            bottomBar = {
-                if (activeOverlay == null) {
-                    NavigationBar(
-                        containerColor = Color(0xFF0D1424),
-                        tonalElevation = 6.dp
-                    ) {
-                        BottomNavDestination.entries.forEach { dest ->
-                            val selected = selectedBottomNav == dest
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { selectedBottomNav = dest },
-                                icon = {
-                                    Icon(
-                                        imageVector = dest.icon,
-                                        contentDescription = dest.label
-                                    )
-                                },
-                                label = {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp)
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { activeOverlay = null }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                                    }
                                     Text(
-                                        text = dest.label.uppercase(),
-                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                        fontSize = 11.sp
+                                        text = if (activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN") "Multiplayer Draft & Lobby" else "Draft Room & Multiplayer Lobby",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color(0xFF00E5FF),
-                                    selectedTextColor = Color.White,
-                                    indicatorColor = Color(0xFF1E293B),
-                                    unselectedIconColor = Color(0xFF7E8B9F),
-                                    unselectedTextColor = Color(0xFF7E8B9F)
+                                }
+                            }
+                        }
+                        "SETTINGS" -> {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .liquidGlassBar()
+                                    .statusBarsPadding(),
+                                color = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp)
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { activeOverlay = null }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    Text(
+                                        text = "League Settings & Rules",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            when (selectedBottomNav) {
+                                BottomNavDestination.FANTASY -> {
+                                    SleeperLeagueHeader(
+                                        leagueTitle = "${humanTeam?.teamName ?: "Northern Ice"} League",
+                                        team = humanTeam,
+                                        activeSubTab = activeLeagueSubTab,
+                                        onSelectSubTab = { activeLeagueSubTab = it },
+                                        onOpenSettings = { activeOverlay = "SETTINGS" },
+                                        onBackClick = { selectedBottomNav = BottomNavDestination.HOME }
+                                    )
+                                }
+                                BottomNavDestination.HOME -> {
+                                    SleeperStandardHeader(
+                                        title = "NHL Fantasy GM",
+                                        subtitle = "${humanTeam?.teamName ?: "My Franchise"} • ${humanTeam?.wins ?: 0}W - ${humanTeam?.losses ?: 0}L",
+                                        team = humanTeam,
+                                        onOpenSettings = { activeOverlay = "SETTINGS" }
+                                    )
+                                }
+                                BottomNavDestination.SCORES -> {
+                                    SleeperStandardHeader(
+                                        title = "NHL Live Scores",
+                                        subtitle = "Real-time NHL game stats & standings",
+                                        team = null,
+                                        onOpenSettings = { activeOverlay = "SETTINGS" }
+                                    )
+                                }
+                                BottomNavDestination.PROFILE -> {
+                                    SleeperStandardHeader(
+                                        title = "GM Franchise Profile",
+                                        subtitle = humanTeam?.teamName ?: "Manager",
+                                        team = humanTeam,
+                                        onOpenSettings = { activeOverlay = "SETTINGS" }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                bottomBar = {
+                    if (activeOverlay == null) {
+                        NavigationBar(
+                            modifier = Modifier.liquidGlassBar(),
+                            containerColor = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
+                            tonalElevation = if (isLiquidGlass) 0.dp else 6.dp
+                        ) {
+                            BottomNavDestination.entries.forEach { dest ->
+                                val selected = selectedBottomNav == dest
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { selectedBottomNav = dest },
+                                    icon = {
+                                        Icon(
+                                            imageVector = dest.icon,
+                                            contentDescription = dest.label
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = dest.label.uppercase(),
+                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            fontSize = 11.sp
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }
-            }
-        ) { innerPadding ->
+            ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -573,6 +582,7 @@ fun NhlFantasyGmAppRoot(
                         }
                     }
                 }
+            }
             }
         }
 

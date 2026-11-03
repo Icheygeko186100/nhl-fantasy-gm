@@ -1,10 +1,12 @@
 package com.nhlfantasygm.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -131,29 +133,39 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Appearance & Display
+        // 2. Appearance, Liquid Glass & Material You
         item {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp, enableShader = true)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Palette, contentDescription = null, tint = IceCyan)
-                        Text(
-                            text = "Appearance & Theme",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text(
+                                text = "Liquid Glass & Material You Theme",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Open-source AGSL optical glass refraction + Android 12+ Dynamic Color",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     Row(
@@ -173,6 +185,115 @@ fun SettingsScreen(
                                     }
                                 }
                             )
+                        }
+                    }
+
+                    // Quick Toggles for Liquid Glass & Material You
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Liquid Glass Optical Engine",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Translucent frosted lenses, specular rim highlights, and aurora backdrop",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.themeMode.usesLiquidGlass,
+                            onCheckedChange = { enabled ->
+                                val nextMode = when {
+                                    enabled && settings.themeMode.usesMaterialYou -> AppThemeMode.LIQUID_MATERIAL_YOU
+                                    enabled -> AppThemeMode.LIQUID_GLASS
+                                    settings.themeMode.usesMaterialYou -> AppThemeMode.MATERIAL_YOU
+                                    else -> AppThemeMode.DARK
+                                }
+                                onSaveTheme(nextMode)
+                            }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Material You Dynamic Wallpaper Palette",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Adapts accent and surface colors to your Android 12+ system wallpaper",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.themeMode.usesMaterialYou,
+                            onCheckedChange = { enabled ->
+                                val nextMode = when {
+                                    enabled && settings.themeMode.usesLiquidGlass -> AppThemeMode.LIQUID_MATERIAL_YOU
+                                    enabled -> AppThemeMode.MATERIAL_YOU
+                                    settings.themeMode.usesLiquidGlass -> AppThemeMode.LIQUID_GLASS
+                                    else -> AppThemeMode.DARK
+                                }
+                                onSaveTheme(nextMode)
+                            }
+                        )
+                    }
+
+                    // Live Material You & Liquid Glass Swatch Preview
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .liquidGlassSurface(RoundedCornerShape(12.dp), 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Active Palette Swatches",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(MaterialTheme.colorScheme.secondary, CircleShape)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                )
+                            }
                         }
                     }
 

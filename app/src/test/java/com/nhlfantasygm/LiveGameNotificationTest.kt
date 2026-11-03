@@ -1,6 +1,7 @@
 package com.nhlfantasygm
 
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
+import com.nhlfantasygm.model.AppThemeMode
 import com.nhlfantasygm.service.LiveGameSnapshot
 import com.nhlfantasygm.service.TeamBadgeGenerator
 import org.junit.Assert.*
@@ -193,5 +194,26 @@ class LiveGameNotificationTest {
         assertTrue(pinned.contains(finalGame.gameId))
         pinned.remove(finalGame.gameId)
         assertFalse(pinned.contains(finalGame.gameId))
+    }
+
+    @Test
+    fun `liquid glass and material you theme modes expose accurate optical and dynamic color flags`() {
+        assertTrue(AppThemeMode.LIQUID_MATERIAL_YOU.usesLiquidGlass)
+        assertTrue(AppThemeMode.LIQUID_MATERIAL_YOU.usesMaterialYou)
+
+        assertTrue(AppThemeMode.LIQUID_GLASS.usesLiquidGlass)
+        assertFalse(AppThemeMode.LIQUID_GLASS.usesMaterialYou)
+
+        assertFalse(AppThemeMode.MATERIAL_YOU.usesLiquidGlass)
+        assertTrue(AppThemeMode.MATERIAL_YOU.usesMaterialYou)
+
+        assertFalse(AppThemeMode.DARK.usesLiquidGlass)
+        assertFalse(AppThemeMode.DARK.usesMaterialYou)
+
+        assertFalse(AppThemeMode.LIGHT.usesLiquidGlass)
+        assertFalse(AppThemeMode.LIGHT.usesMaterialYou)
+
+        assertTrue(AppThemeMode.SYSTEM.usesLiquidGlass)
+        assertTrue(AppThemeMode.SYSTEM.usesMaterialYou)
     }
 }

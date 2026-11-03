@@ -54,10 +54,17 @@ data class DraftConfig(
         get() = totalRounds * teamCount
 }
 
-enum class AppThemeMode(val label: String) {
-    DARK("Dark Rink (Default)"),
-    LIGHT("Ice Arena Light"),
-    SYSTEM("Follow System")
+enum class AppThemeMode(
+    val label: String,
+    val usesLiquidGlass: Boolean = false,
+    val usesMaterialYou: Boolean = false
+) {
+    LIQUID_MATERIAL_YOU("Liquid Glass + Material You", usesLiquidGlass = true, usesMaterialYou = true),
+    LIQUID_GLASS("Liquid Glass (Ice Cyan)", usesLiquidGlass = true, usesMaterialYou = false),
+    MATERIAL_YOU("Material You (Dynamic)", usesLiquidGlass = false, usesMaterialYou = true),
+    DARK("Dark Rink (Classic)", usesLiquidGlass = false, usesMaterialYou = false),
+    LIGHT("Ice Arena Light", usesLiquidGlass = false, usesMaterialYou = false),
+    SYSTEM("Follow System + Glass", usesLiquidGlass = true, usesMaterialYou = true)
 }
 
 enum class DataFreshnessState(val badgeText: String, val detailPrefix: String) {

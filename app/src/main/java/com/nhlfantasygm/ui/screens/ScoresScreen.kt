@@ -78,10 +78,12 @@ fun ScoresScreen(
         }
     }
 
+    val isLiquidGlass = LocalLiquidGlassEnabled.current
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0E17)),
+            .background(if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -183,9 +185,11 @@ fun ScoresScreen(
             item {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFF131D31),
-                    border = BorderStroke(1.dp, Color(0xFF223555)),
-                    modifier = Modifier.fillMaxWidth()
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -199,17 +203,20 @@ fun ScoresScreen(
                             text = "No Games Scheduled Today",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Tap refresh to check for upcoming NHL game schedules and live updates.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF7E8B9F),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                         Button(
                             onClick = onRefreshScores,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color(0xFF001F29)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Sync Live Scores", fontWeight = FontWeight.Bold)
@@ -245,16 +252,18 @@ private fun NhlGameScorecard(
 
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF131D31),
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             1.dp,
             when {
                 isPinned -> ProfitEmerald.copy(alpha = 0.6f)
                 isLive -> ProfitEmerald.copy(alpha = 0.35f)
-                else -> Color(0xFF223555)
+                else -> MaterialTheme.colorScheme.outline
             }
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
     ) {
         Column(
             modifier = Modifier

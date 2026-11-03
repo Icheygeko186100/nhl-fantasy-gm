@@ -55,12 +55,16 @@ fun SleeperLeagueHeader(
     onBackClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val isLiquidGlass = LocalLiquidGlassEnabled.current
+    val headerBg = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .liquidGlassBar()
             .statusBarsPadding(),
-        color = Color(0xFF0D1424),
-        tonalElevation = 4.dp
+        color = headerBg,
+        tonalElevation = if (isLiquidGlass) 0.dp else 4.dp
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Row 1: Back, Crest, League Title, and Settings Cog
@@ -160,14 +164,14 @@ fun SleeperLeagueHeader(
                                 .width(if (isSelected) 38.dp else 0.dp)
                                 .height(3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
                         )
                     }
                 }
             }
 
             HorizontalDivider(
-                color = Color(0xFF1E293B),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
                 thickness = 1.dp
             )
         }
@@ -186,12 +190,16 @@ fun SleeperStandardHeader(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLiquidGlass = LocalLiquidGlassEnabled.current
+    val headerBg = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .liquidGlassBar()
             .statusBarsPadding(),
-        color = Color(0xFF0D1424),
-        tonalElevation = 4.dp
+        color = headerBg,
+        tonalElevation = if (isLiquidGlass) 0.dp else 4.dp
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(

@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 data class UserAppSettings(
-    val themeMode: AppThemeMode = AppThemeMode.DARK,
+    val themeMode: AppThemeMode = AppThemeMode.LIQUID_MATERIAL_YOU,
     val economyConfig: EconomyConfig = EconomyConfig(),
     val scoringWeights: ScoringWeights = ScoringWeights(),
     val allowOfflineSeasonSim: Boolean = true,
@@ -44,7 +44,7 @@ class SettingsDataStore(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private object Keys {
-        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val THEME_MODE = stringPreferencesKey("theme_mode_v2")
         val STARTING_BUDGET = longPreferencesKey("starting_budget_cad")
         val SALARY_CAP = longPreferencesKey("salary_cap_cad")
         val ENFORCE_CAP = booleanPreferencesKey("enforce_salary_cap")
@@ -68,7 +68,7 @@ class SettingsDataStore(
     val settingsFlow: Flow<UserAppSettings> = dataStore.data.map { prefs ->
         val theme = prefs[Keys.THEME_MODE]?.let {
             runCatching { AppThemeMode.valueOf(it) }.getOrNull()
-        } ?: AppThemeMode.DARK
+        } ?: AppThemeMode.LIQUID_MATERIAL_YOU
 
         val economy = EconomyConfig(
             startingBudgetCad = prefs[Keys.STARTING_BUDGET] ?: 100_000_000L,
