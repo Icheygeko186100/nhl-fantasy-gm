@@ -81,17 +81,19 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Sleeper Matchup Spotlight (Top Hero Card)
         if (nextUserMatchup != null) {
             item {
-                LiquidGlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    cornerRadius = 18.dp,
-                    onClick = { onNavigateMainTab(1) }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.2.dp, IceCyan.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateMainTab(1) }
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -106,7 +108,7 @@ fun HomeScreen(
                                 text = "WEEK ${nextUserMatchup.weekNumber} MATCHUP",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = IceCyan
                             )
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
@@ -127,7 +129,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                            Column {
                                 Text(
                                     text = "${nextUserMatchup.awayTeamName} vs ${nextUserMatchup.homeTeamName}",
                                     style = MaterialTheme.typography.titleMedium,
@@ -143,22 +145,15 @@ fun HomeScreen(
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                LiquidButton(
+                                Button(
                                     onClick = { onNavigateMainTab(1) },
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                    colors = ButtonDefaults.buttonColors(containerColor = IceCyan, contentColor = Color(0xFF001F29))
                                 ) {
                                     Text("Matchup", fontWeight = FontWeight.Bold)
                                 }
                                 if (!nextUserMatchup.isCompleted) {
-                                    LiquidButton(
-                                        onClick = onSimulateNextWeek,
-                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                    ) {
-                                        Text("Sim", fontWeight = FontWeight.Bold)
+                                    FilledTonalButton(onClick = onSimulateNextWeek) {
+                                        Text("Sim")
                                     }
                                 }
                             }
@@ -260,10 +255,7 @@ fun HomeScreen(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
-                    .clickable { onNavigateMainTab(4) }
+                modifier = Modifier.clickable { onNavigateMainTab(4) }
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -336,7 +328,6 @@ fun HomeScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
                     .clickable { onNavigateMainTab(2) }
             ) {
                 Row(
@@ -378,10 +369,7 @@ fun HomeScreen(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         priceMovers.forEach { item ->
@@ -630,7 +618,6 @@ private fun LiveNhlGameCard(
     Surface(
         modifier = Modifier
             .width(195.dp)
-            .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -695,7 +682,6 @@ private fun TopPerformerCompactCard(
     Surface(
         modifier = Modifier
             .width(168.dp)
-            .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,

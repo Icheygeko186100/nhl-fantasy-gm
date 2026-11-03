@@ -40,24 +40,20 @@ fun ProfileScreen(
     onRefreshData: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isLiquidGlass = LocalLiquidGlassEnabled.current
-
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 96.dp),
+            .background(Color(0xFF0B0E17)),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Franchise Profile Card
         item {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp, enableShader = true)
+                color = Color(0xFF131D31),
+                border = BorderStroke(1.dp, Color(0xFF223555)),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier
@@ -106,11 +102,9 @@ fun ProfileScreen(
         item {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
+                color = Color(0xFF131D31),
+                border = BorderStroke(1.dp, Color(0xFF223555)),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
@@ -122,7 +116,7 @@ fun ProfileScreen(
                         text = "Virtual CAD Economy (Fictional Simulation)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = Color.White
                     )
 
                     Row(
@@ -137,11 +131,11 @@ fun ProfileScreen(
                         EconomyMetricItem(
                             label = "Cap Space Available",
                             value = CadFormatter.formatCompact(financials?.remainingCapSpaceCad ?: 0L),
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color(0xFF00E5FF)
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+                    HorizontalDivider(color = Color(0xFF1E293B))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -150,7 +144,7 @@ fun ProfileScreen(
                         EconomyMetricItem(
                             label = "Current Payroll",
                             value = CadFormatter.formatCompact(financials?.currentPayrollCad ?: 0L),
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = Color.White
                         )
                         EconomyMetricItem(
                             label = "Roster Market Value",
@@ -166,11 +160,10 @@ fun ProfileScreen(
         item {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                color = Color(0xFF131D31),
+                border = BorderStroke(1.dp, Color(0xFF223555)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
                     .clickable(onClick = onOpenSettings)
             ) {
                 Row(

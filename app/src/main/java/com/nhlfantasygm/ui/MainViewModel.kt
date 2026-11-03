@@ -1036,17 +1036,6 @@ class MainViewModel(
         viewModelScope.launch { repository.updateThemeMode(mode) }
     }
 
-    fun updateLiquidGlassOptics(
-        refraction: Float,
-        dispersion: Float,
-        blur: Float,
-        specular: Float
-    ) {
-        viewModelScope.launch {
-            repository.updateLiquidGlassOptics(refraction, dispersion, blur, specular)
-        }
-    }
-
     fun saveScoringWeights(weights: ScoringWeights) {
         viewModelScope.launch {
             repository.updateScoringWeights(weights)

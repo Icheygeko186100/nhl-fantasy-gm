@@ -1,11 +1,8 @@
 package com.nhlfantasygm
 
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
-import com.nhlfantasygm.data.local.UserAppSettings
-import com.nhlfantasygm.model.AppThemeMode
 import com.nhlfantasygm.service.LiveGameSnapshot
 import com.nhlfantasygm.service.TeamBadgeGenerator
-import com.nhlfantasygm.ui.theme.LiquidGlassSettings
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -196,52 +193,5 @@ class LiveGameNotificationTest {
         assertTrue(pinned.contains(finalGame.gameId))
         pinned.remove(finalGame.gameId)
         assertFalse(pinned.contains(finalGame.gameId))
-    }
-
-    @Test
-    fun `liquid glass and material you theme modes expose accurate optical and dynamic color flags`() {
-        assertTrue(AppThemeMode.LIQUID_MATERIAL_YOU.usesLiquidGlass)
-        assertTrue(AppThemeMode.LIQUID_MATERIAL_YOU.usesMaterialYou)
-
-        assertTrue(AppThemeMode.LIQUID_GLASS.usesLiquidGlass)
-        assertFalse(AppThemeMode.LIQUID_GLASS.usesMaterialYou)
-
-        assertFalse(AppThemeMode.MATERIAL_YOU.usesLiquidGlass)
-        assertTrue(AppThemeMode.MATERIAL_YOU.usesMaterialYou)
-
-        assertFalse(AppThemeMode.DARK.usesLiquidGlass)
-        assertFalse(AppThemeMode.DARK.usesMaterialYou)
-
-        assertFalse(AppThemeMode.LIGHT.usesLiquidGlass)
-        assertFalse(AppThemeMode.LIGHT.usesMaterialYou)
-
-        assertTrue(AppThemeMode.SYSTEM.usesLiquidGlass)
-        assertTrue(AppThemeMode.SYSTEM.usesMaterialYou)
-    }
-
-    @Test
-    fun `liquid glass settings and user settings contain expected default optical parameters`() {
-        val defaultSettings = LiquidGlassSettings()
-        assertTrue(defaultSettings.refractionStrength in 0.1f..1.0f)
-        assertTrue(defaultSettings.dispersion in 0.1f..1.0f)
-        assertTrue(defaultSettings.blurRadiusDp in 4f..30f)
-        assertTrue(defaultSettings.specularIntensity in 0.3f..1.5f)
-        assertTrue(defaultSettings.vibrancy >= 1.0f)
-
-        val userSettings = UserAppSettings()
-        assertEquals(defaultSettings.refractionStrength, userSettings.glassRefractionStrength)
-        assertEquals(defaultSettings.dispersion, userSettings.glassDispersion)
-        assertEquals(defaultSettings.blurRadiusDp, userSettings.glassBlurRadius)
-        assertEquals(defaultSettings.specularIntensity, userSettings.glassSpecularIntensity)
-    }
-
-    @Test
-    fun `bottom navigation destinations map correctly to floating liquid glass tabs`() {
-        val destinations = BottomNavDestination.entries
-        assertEquals(4, destinations.size)
-        assertEquals(BottomNavDestination.HOME, destinations[0])
-        assertEquals(BottomNavDestination.FANTASY, destinations[1])
-        assertEquals(BottomNavDestination.SCORES, destinations[2])
-        assertEquals(BottomNavDestination.PROFILE, destinations[3])
     }
 }

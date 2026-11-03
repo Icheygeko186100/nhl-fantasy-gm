@@ -1,12 +1,10 @@
 package com.nhlfantasygm.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.nhlfantasygm.data.local.UserAppSettings
 import com.nhlfantasygm.data.local.SyncStatusEntity
 import com.nhlfantasygm.model.*
@@ -38,7 +35,6 @@ fun SettingsScreen(
     isSyncing: Boolean = false,
     onRefreshData: () -> Unit = {},
     onSaveTheme: (AppThemeMode) -> Unit,
-    onUpdateLiquidGlassOptics: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> },
     onSaveEconomy: (EconomyConfig, Boolean) -> Unit,
     onSaveScoring: (ScoringWeights) -> Unit,
     onToggleOfflineSim: (Boolean) -> Unit,
@@ -57,19 +53,6 @@ fun SettingsScreen(
     }
     var recalcTreasuryNow by remember { mutableStateOf(false) }
 
-    var refractionStrength by remember(settings.glassRefractionStrength) {
-        mutableFloatStateOf(settings.glassRefractionStrength)
-    }
-    var dispersion by remember(settings.glassDispersion) {
-        mutableFloatStateOf(settings.glassDispersion)
-    }
-    var blurRadius by remember(settings.glassBlurRadius) {
-        mutableFloatStateOf(settings.glassBlurRadius)
-    }
-    var specularIntensity by remember(settings.glassSpecularIntensity) {
-        mutableFloatStateOf(settings.glassSpecularIntensity)
-    }
-
     var wGoals by remember(settings.scoringWeights) { mutableFloatStateOf(settings.scoringWeights.goals.toFloat()) }
     var wAssists by remember(settings.scoringWeights) { mutableFloatStateOf(settings.scoringWeights.assists.toFloat()) }
     var wPpp by remember(settings.scoringWeights) { mutableFloatStateOf(settings.scoringWeights.powerPlayPoints.toFloat()) }
@@ -85,7 +68,7 @@ fun SettingsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Header Card
@@ -93,10 +76,7 @@ fun SettingsScreen(
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(18.dp), 18.dp)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(
                     modifier = Modifier
@@ -151,39 +131,29 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Appearance, Liquid Glass & Material You
+        // 2. Appearance & Display
         item {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp, enableShader = true)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Column {
-                            Text(
-                                text = "Liquid Glass & Material You Theme",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Open-source AGSL optical glass refraction + Android 12+ Dynamic Color",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = IceCyan)
+                        Text(
+                            text = "Appearance & Theme",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Row(
@@ -203,258 +173,6 @@ fun SettingsScreen(
                                     }
                                 }
                             )
-                        }
-                    }
-
-                    // Quick Toggles for Liquid Glass & Material You
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Liquid Glass Optical Engine",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Translucent frosted lenses, specular rim highlights, and aurora backdrop",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = settings.themeMode.usesLiquidGlass,
-                            onCheckedChange = { enabled ->
-                                val nextMode = when {
-                                    enabled && settings.themeMode.usesMaterialYou -> AppThemeMode.LIQUID_MATERIAL_YOU
-                                    enabled -> AppThemeMode.LIQUID_GLASS
-                                    settings.themeMode.usesMaterialYou -> AppThemeMode.MATERIAL_YOU
-                                    else -> AppThemeMode.DARK
-                                }
-                                onSaveTheme(nextMode)
-                            }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Material You Dynamic Wallpaper Palette",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Adapts accent and surface colors to your Android 12+ system wallpaper",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = settings.themeMode.usesMaterialYou,
-                            onCheckedChange = { enabled ->
-                                val nextMode = when {
-                                    enabled && settings.themeMode.usesLiquidGlass -> AppThemeMode.LIQUID_MATERIAL_YOU
-                                    enabled -> AppThemeMode.MATERIAL_YOU
-                                    settings.themeMode.usesLiquidGlass -> AppThemeMode.LIQUID_GLASS
-                                    else -> AppThemeMode.DARK
-                                }
-                                onSaveTheme(nextMode)
-                            }
-                        )
-                    }
-
-                    if (settings.themeMode.usesLiquidGlass) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Liquid Glass Optics Tuning",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            TextButton(
-                                onClick = {
-                                    refractionStrength = 0.50f
-                                    dispersion = 0.35f
-                                    blurRadius = 16f
-                                    specularIntensity = 0.70f
-                                    onUpdateLiquidGlassOptics(0.50f, 0.35f, 16f, 0.70f)
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("Reset Defaults", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-
-                        // 1. Lens Refraction Slider
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Lens Refraction Strength", style = MaterialTheme.typography.labelMedium)
-                                Text("${(refractionStrength * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            }
-                            Slider(
-                                value = refractionStrength,
-                                onValueChange = {
-                                    refractionStrength = it
-                                    onUpdateLiquidGlassOptics(it, dispersion, blurRadius, specularIntensity)
-                                },
-                                valueRange = 0.05f..1.0f
-                            )
-                        }
-
-                        // 2. Chromatic Dispersion Slider
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Chromatic Dispersion (Prism Fringing)", style = MaterialTheme.typography.labelMedium)
-                                Text("${(dispersion * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            }
-                            Slider(
-                                value = dispersion,
-                                onValueChange = {
-                                    dispersion = it
-                                    onUpdateLiquidGlassOptics(refractionStrength, it, blurRadius, specularIntensity)
-                                },
-                                valueRange = 0.0f..1.0f
-                            )
-                        }
-
-                        // 3. Frosted Blur Slider
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Frosted Blur Radius", style = MaterialTheme.typography.labelMedium)
-                                Text("${blurRadius.toInt()} dp", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            }
-                            Slider(
-                                value = blurRadius,
-                                onValueChange = {
-                                    blurRadius = it
-                                    onUpdateLiquidGlassOptics(refractionStrength, dispersion, it, specularIntensity)
-                                },
-                                valueRange = 0f..30f
-                            )
-                        }
-
-                        // 4. Specular Highlight Slider
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Specular Rim Highlights", style = MaterialTheme.typography.labelMedium)
-                                Text("${(specularIntensity * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            }
-                            Slider(
-                                value = specularIntensity,
-                                onValueChange = {
-                                    specularIntensity = it
-                                    onUpdateLiquidGlassOptics(refractionStrength, dispersion, blurRadius, it)
-                                },
-                                valueRange = 0.1f..1.2f
-                            )
-                        }
-
-                        // Interactive Live Preview Glass Card
-                        LiquidGlassCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            cornerRadius = 16.dp,
-                            tintAlpha = 0.50f
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "✨ Liquid Glass Lens Live Preview",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "Refracts live aurora orbs & underlying graphics with RGB prism dispersion",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                LiquidButton(
-                                    onClick = { /* Tactile tap test */ },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text("Test Lens", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-
-                    // Live Material You & Liquid Glass Swatch Preview
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .liquidGlassSurface(RoundedCornerShape(12.dp), 12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Active Palette Swatches",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .background(MaterialTheme.colorScheme.secondary, CircleShape)
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .background(MaterialTheme.colorScheme.tertiary, CircleShape)
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                                )
-                            }
                         }
                     }
 

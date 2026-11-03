@@ -2,7 +2,6 @@ package com.nhlfantasygm.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -10,7 +9,6 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -146,41 +144,18 @@ val HockeyTypography = Typography(
     )
 )
 
-private fun ColorScheme.applyLiquidGlass(isDark: Boolean): ColorScheme {
-    return if (isDark) {
-        copy(
-            background = Color(0xFF060B16),
-            surface = surface.copy(alpha = 0.26f),
-            surfaceVariant = surfaceVariant.copy(alpha = 0.34f),
-            primaryContainer = primaryContainer.copy(alpha = 0.62f),
-            secondaryContainer = secondaryContainer.copy(alpha = 0.62f),
-            outline = primary.copy(alpha = 0.46f)
-        )
-    } else {
-        copy(
-            surface = surface.copy(alpha = 0.42f),
-            surfaceVariant = surfaceVariant.copy(alpha = 0.48f),
-            primaryContainer = primaryContainer.copy(alpha = 0.72f),
-            secondaryContainer = secondaryContainer.copy(alpha = 0.72f),
-            outline = primary.copy(alpha = 0.42f)
-        )
-    }
-}
-
 @Composable
 fun NhlFantasyGmTheme(
-    themeMode: AppThemeMode = AppThemeMode.LIQUID_MATERIAL_YOU,
-    liquidGlassSettings: LiquidGlassSettings = LiquidGlassSettings(),
+    themeMode: AppThemeMode = AppThemeMode.DARK,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val useDark = when (themeMode) {
+        AppThemeMode.DARK -> true
         AppThemeMode.LIGHT -> false
-        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
-        else -> true
+        AppThemeMode.SYSTEM, AppThemeMode.MATERIAL_YOU -> isSystemInDarkTheme()
     }
-
-    val baseScheme: ColorScheme = if (themeMode.usesMaterialYou && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val colors = if (themeMode == AppThemeMode.MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         runCatching {
             if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }.getOrNull() ?: if (useDark) DarkRinkColorScheme else IceArenaLightColorScheme
@@ -188,21 +163,9 @@ fun NhlFantasyGmTheme(
         if (useDark) DarkRinkColorScheme else IceArenaLightColorScheme
     }
 
-    val finalColors = if (themeMode.usesLiquidGlass) {
-        baseScheme.applyLiquidGlass(isDark = useDark)
-    } else {
-        baseScheme
-    }
-
-    CompositionLocalProvider(
-        LocalLiquidGlassEnabled provides themeMode.usesLiquidGlass,
-        LocalMaterialYouEnabled provides themeMode.usesMaterialYou,
-        LocalLiquidGlassSettings provides liquidGlassSettings
-    ) {
-        MaterialTheme(
-            colorScheme = finalColors,
-            typography = HockeyTypography,
-            content = content
-        )
-    }
+    MaterialTheme(
+        colorScheme = colors,
+        typography = HockeyTypography,
+        content = content
+    )
 }

@@ -78,13 +78,11 @@ fun ScoresScreen(
         }
     }
 
-    val isLiquidGlass = LocalLiquidGlassEnabled.current
-
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 96.dp),
+            .background(Color(0xFF0B0E17)),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Top Header Info
@@ -185,11 +183,9 @@ fun ScoresScreen(
             item {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
+                    color = Color(0xFF131D31),
+                    border = BorderStroke(1.dp, Color(0xFF223555)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
@@ -203,20 +199,17 @@ fun ScoresScreen(
                             text = "No Games Scheduled Today",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = Color.White
                         )
                         Text(
                             text = "Tap refresh to check for upcoming NHL game schedules and live updates.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color(0xFF7E8B9F),
                             textAlign = TextAlign.Center
                         )
                         Button(
                             onClick = onRefreshScores,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color(0xFF001F29)),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Sync Live Scores", fontWeight = FontWeight.Bold)
@@ -251,23 +244,17 @@ private fun NhlGameScorecard(
     val isFinal = game.gameState.equals("OFF", ignoreCase = true) || game.gameState.equals("FINAL", ignoreCase = true)
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF131D31),
         border = BorderStroke(
-            1.2.dp,
+            1.dp,
             when {
-                isPinned -> ProfitEmerald.copy(alpha = 0.7f)
-                isLive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                isPinned -> ProfitEmerald.copy(alpha = 0.6f)
+                isLive -> ProfitEmerald.copy(alpha = 0.35f)
+                else -> Color(0xFF223555)
             }
         ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .liquidGlassSurface(
-                shape = RoundedCornerShape(16.dp),
-                cornerRadius = 16.dp,
-                enableShader = true
-            )
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
@@ -416,27 +403,33 @@ private fun NhlGameScorecard(
                         }
                     }
                 } else {
-                    LiquidButton(
-                        onClick = onTogglePin,
-                        shape = RoundedCornerShape(10.dp),
-                        containerColor = if (isPinned) ProfitEmerald.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (isPinned) ProfitEmerald else MaterialTheme.colorScheme.primary,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        border = BorderStroke(1.dp, if (isPinned) ProfitEmerald else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPinned) ProfitEmerald.copy(alpha = 0.18f) else Color(0xFF1E293B),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isPinned) ProfitEmerald else Color(0xFF00E5FF).copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.clickable { onTogglePin() }
                     ) {
-                        Icon(
-                            imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
-                            tint = if (isPinned) ProfitEmerald else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = if (isPinned) "Pinned • Live" else "Pin Live Score",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPinned) ProfitEmerald else MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
+                                tint = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = if (isPinned) "Pinned • Live" else "Pin Live Score",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPinned) ProfitEmerald else Color(0xFF00E5FF)
+                            )
+                        }
                     }
                 }
             }

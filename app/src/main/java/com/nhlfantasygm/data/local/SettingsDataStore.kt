@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,11 +22,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 data class UserAppSettings(
-    val themeMode: AppThemeMode = AppThemeMode.LIQUID_MATERIAL_YOU,
-    val glassRefractionStrength: Float = 0.50f,
-    val glassDispersion: Float = 0.35f,
-    val glassBlurRadius: Float = 16f,
-    val glassSpecularIntensity: Float = 0.70f,
+    val themeMode: AppThemeMode = AppThemeMode.DARK,
     val economyConfig: EconomyConfig = EconomyConfig(),
     val scoringWeights: ScoringWeights = ScoringWeights(),
     val allowOfflineSeasonSim: Boolean = true,
@@ -49,11 +44,7 @@ class SettingsDataStore(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private object Keys {
-        val THEME_MODE = stringPreferencesKey("theme_mode_v2")
-        val GLASS_REFRACTION = floatPreferencesKey("glass_refraction_v3")
-        val GLASS_DISPERSION = floatPreferencesKey("glass_dispersion_v3")
-        val GLASS_BLUR = floatPreferencesKey("glass_blur_v3")
-        val GLASS_SPECULAR = floatPreferencesKey("glass_specular_v3")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
         val STARTING_BUDGET = longPreferencesKey("starting_budget_cad")
         val SALARY_CAP = longPreferencesKey("salary_cap_cad")
         val ENFORCE_CAP = booleanPreferencesKey("enforce_salary_cap")
@@ -77,7 +68,7 @@ class SettingsDataStore(
     val settingsFlow: Flow<UserAppSettings> = dataStore.data.map { prefs ->
         val theme = prefs[Keys.THEME_MODE]?.let {
             runCatching { AppThemeMode.valueOf(it) }.getOrNull()
-        } ?: AppThemeMode.LIQUID_MATERIAL_YOU
+        } ?: AppThemeMode.DARK
 
         val economy = EconomyConfig(
             startingBudgetCad = prefs[Keys.STARTING_BUDGET] ?: 100_000_000L,
@@ -94,10 +85,6 @@ class SettingsDataStore(
 
         UserAppSettings(
             themeMode = theme,
-            glassRefractionStrength = prefs[Keys.GLASS_REFRACTION] ?: 0.50f,
-            glassDispersion = prefs[Keys.GLASS_DISPERSION] ?: 0.35f,
-            glassBlurRadius = prefs[Keys.GLASS_BLUR] ?: 16f,
-            glassSpecularIntensity = prefs[Keys.GLASS_SPECULAR] ?: 0.70f,
             economyConfig = economy,
             scoringWeights = scoring,
             allowOfflineSeasonSim = prefs[Keys.ALLOW_OFFLINE_SIM] ?: true,
@@ -151,20 +138,6 @@ class SettingsDataStore(
 
     suspend fun updateThemeMode(mode: AppThemeMode) {
         dataStore.edit { it[Keys.THEME_MODE] = mode.name }
-    }
-
-    suspend fun updateLiquidGlassOptics(
-        refraction: Float,
-        dispersion: Float,
-        blur: Float,
-        specular: Float
-    ) {
-        dataStore.edit {
-            it[Keys.GLASS_REFRACTION] = refraction
-            it[Keys.GLASS_DISPERSION] = dispersion
-            it[Keys.GLASS_BLUR] = blur
-            it[Keys.GLASS_SPECULAR] = specular
-        }
     }
 
     suspend fun updateEconomyConfig(config: EconomyConfig) {
