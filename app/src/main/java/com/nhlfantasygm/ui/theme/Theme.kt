@@ -149,20 +149,20 @@ val HockeyTypography = Typography(
 private fun ColorScheme.applyLiquidGlass(isDark: Boolean): ColorScheme {
     return if (isDark) {
         copy(
-            background = Color(0xFF070C17),
-            surface = surface.copy(alpha = 0.64f),
-            surfaceVariant = surfaceVariant.copy(alpha = 0.54f),
-            primaryContainer = primaryContainer.copy(alpha = 0.72f),
-            secondaryContainer = secondaryContainer.copy(alpha = 0.72f),
-            outline = primary.copy(alpha = 0.44f)
+            background = Color(0xFF060B16),
+            surface = surface.copy(alpha = 0.26f),
+            surfaceVariant = surfaceVariant.copy(alpha = 0.34f),
+            primaryContainer = primaryContainer.copy(alpha = 0.62f),
+            secondaryContainer = secondaryContainer.copy(alpha = 0.62f),
+            outline = primary.copy(alpha = 0.46f)
         )
     } else {
         copy(
-            surface = surface.copy(alpha = 0.76f),
-            surfaceVariant = surfaceVariant.copy(alpha = 0.66f),
-            primaryContainer = primaryContainer.copy(alpha = 0.78f),
-            secondaryContainer = secondaryContainer.copy(alpha = 0.78f),
-            outline = primary.copy(alpha = 0.40f)
+            surface = surface.copy(alpha = 0.42f),
+            surfaceVariant = surfaceVariant.copy(alpha = 0.48f),
+            primaryContainer = primaryContainer.copy(alpha = 0.72f),
+            secondaryContainer = secondaryContainer.copy(alpha = 0.72f),
+            outline = primary.copy(alpha = 0.42f)
         )
     }
 }

@@ -260,7 +260,10 @@ fun HomeScreen(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                modifier = Modifier.clickable { onNavigateMainTab(4) }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
+                    .clickable { onNavigateMainTab(4) }
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -333,6 +336,7 @@ fun HomeScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
                     .clickable { onNavigateMainTab(2) }
             ) {
                 Row(
@@ -374,7 +378,10 @@ fun HomeScreen(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         priceMovers.forEach { item ->
@@ -623,6 +630,7 @@ private fun LiveNhlGameCard(
     Surface(
         modifier = Modifier
             .width(195.dp)
+            .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -687,6 +695,7 @@ private fun TopPerformerCompactCard(
     Surface(
         modifier = Modifier
             .width(168.dp)
+            .liquidGlassSurface(RoundedCornerShape(14.dp), 14.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,

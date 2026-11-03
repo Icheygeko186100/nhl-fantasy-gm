@@ -93,7 +93,10 @@ fun SettingsScreen(
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .liquidGlassSurface(RoundedCornerShape(18.dp), 18.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -269,12 +272,30 @@ fun SettingsScreen(
                     if (settings.themeMode.usesLiquidGlass) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
-                        Text(
-                            text = "Liquid Glass Optics Tuning",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Liquid Glass Optics Tuning",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            TextButton(
+                                onClick = {
+                                    refractionStrength = 0.50f
+                                    dispersion = 0.35f
+                                    blurRadius = 16f
+                                    specularIntensity = 0.70f
+                                    onUpdateLiquidGlassOptics(0.50f, 0.35f, 16f, 0.70f)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("Reset Defaults", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
 
                         // 1. Lens Refraction Slider
                         Column {

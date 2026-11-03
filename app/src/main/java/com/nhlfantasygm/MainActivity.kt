@@ -36,6 +36,7 @@ import com.nhlfantasygm.ui.theme.LiquidGlassBackdrop
 import com.nhlfantasygm.ui.theme.LiquidGlassSettings
 import com.nhlfantasygm.ui.theme.LocalLiquidGlassEnabled
 import com.nhlfantasygm.ui.theme.NhlFantasyGmTheme
+import com.nhlfantasygm.ui.theme.captureLiquidBackdrop
 import com.nhlfantasygm.ui.theme.liquidGlassBar
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -337,8 +338,13 @@ fun NhlFantasyGmAppRoot(
                         .fillMaxSize()
                         .padding(top = innerPadding.calculateTopPadding())
                 ) {
-                    when {
-                    activeOverlay == "DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN" -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .captureLiquidBackdrop()
+                    ) {
+                        when {
+                        activeOverlay == "DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN" -> {
                         DraftScreen(
                             draftSession = draftSession,
                             draftConfig = vm.repository.decodeDraftConfig(draftSession),
@@ -564,17 +570,18 @@ fun NhlFantasyGmAppRoot(
                             }
                         }
                     }
-                }
+                        }
+                    }
 
-                if (activeOverlay == null) {
-                    LiquidBottomTabs(
-                        selectedDestination = selectedBottomNav,
-                        onSelectDestination = { selectedBottomNav = it },
-                        isLiquidGlass = isLiquidGlass,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    if (activeOverlay == null) {
+                        LiquidBottomTabs(
+                            selectedDestination = selectedBottomNav,
+                            onSelectDestination = { selectedBottomNav = it },
+                            isLiquidGlass = isLiquidGlass,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
-            }
             }
         }
 

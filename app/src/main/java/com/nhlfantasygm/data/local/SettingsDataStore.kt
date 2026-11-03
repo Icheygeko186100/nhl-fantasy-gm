@@ -50,10 +50,10 @@ class SettingsDataStore(
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode_v2")
-        val GLASS_REFRACTION = floatPreferencesKey("glass_refraction_v2")
-        val GLASS_DISPERSION = floatPreferencesKey("glass_dispersion_v2")
-        val GLASS_BLUR = floatPreferencesKey("glass_blur_v2")
-        val GLASS_SPECULAR = floatPreferencesKey("glass_specular_v2")
+        val GLASS_REFRACTION = floatPreferencesKey("glass_refraction_v3")
+        val GLASS_DISPERSION = floatPreferencesKey("glass_dispersion_v3")
+        val GLASS_BLUR = floatPreferencesKey("glass_blur_v3")
+        val GLASS_SPECULAR = floatPreferencesKey("glass_specular_v3")
         val STARTING_BUDGET = longPreferencesKey("starting_budget_cad")
         val SALARY_CAP = longPreferencesKey("salary_cap_cad")
         val ENFORCE_CAP = booleanPreferencesKey("enforce_salary_cap")
