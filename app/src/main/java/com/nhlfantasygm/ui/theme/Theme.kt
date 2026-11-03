@@ -170,6 +170,7 @@ private fun ColorScheme.applyLiquidGlass(isDark: Boolean): ColorScheme {
 @Composable
 fun NhlFantasyGmTheme(
     themeMode: AppThemeMode = AppThemeMode.LIQUID_MATERIAL_YOU,
+    liquidGlassSettings: LiquidGlassSettings = LiquidGlassSettings(),
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -195,7 +196,8 @@ fun NhlFantasyGmTheme(
 
     CompositionLocalProvider(
         LocalLiquidGlassEnabled provides themeMode.usesLiquidGlass,
-        LocalMaterialYouEnabled provides themeMode.usesMaterialYou
+        LocalMaterialYouEnabled provides themeMode.usesMaterialYou,
+        LocalLiquidGlassSettings provides liquidGlassSettings
     ) {
         MaterialTheme(
             colorScheme = finalColors,

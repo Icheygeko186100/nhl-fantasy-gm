@@ -46,7 +46,7 @@ fun ProfileScreen(
         modifier = modifier
             .fillMaxSize()
             .background(if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Franchise Profile Card
@@ -57,7 +57,7 @@ fun ProfileScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp)
+                    .liquidGlassSurface(RoundedCornerShape(16.dp), 16.dp, enableShader = true)
             ) {
                 Row(
                     modifier = Modifier

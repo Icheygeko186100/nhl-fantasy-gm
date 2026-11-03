@@ -31,7 +31,9 @@ import com.nhlfantasygm.ui.components.SleeperLeagueHeader
 import com.nhlfantasygm.ui.components.SleeperLeagueSubTab
 import com.nhlfantasygm.ui.components.SleeperStandardHeader
 import com.nhlfantasygm.ui.screens.*
+import com.nhlfantasygm.ui.theme.LiquidBottomTabs
 import com.nhlfantasygm.ui.theme.LiquidGlassBackdrop
+import com.nhlfantasygm.ui.theme.LiquidGlassSettings
 import com.nhlfantasygm.ui.theme.LocalLiquidGlassEnabled
 import com.nhlfantasygm.ui.theme.NhlFantasyGmTheme
 import com.nhlfantasygm.ui.theme.liquidGlassBar
@@ -207,7 +209,24 @@ fun NhlFantasyGmAppRoot(
         }
     }
 
-    NhlFantasyGmTheme(themeMode = settings.themeMode) {
+    val liquidSettings = remember(
+        settings.glassRefractionStrength,
+        settings.glassDispersion,
+        settings.glassBlurRadius,
+        settings.glassSpecularIntensity
+    ) {
+        LiquidGlassSettings(
+            refractionStrength = settings.glassRefractionStrength,
+            dispersion = settings.glassDispersion,
+            blurRadiusDp = settings.glassBlurRadius,
+            specularIntensity = settings.glassSpecularIntensity
+        )
+    }
+
+    NhlFantasyGmTheme(
+        themeMode = settings.themeMode,
+        liquidGlassSettings = liquidSettings
+    ) {
         val isLiquidGlass = LocalLiquidGlassEnabled.current
         LiquidGlassBackdrop {
             Scaffold(
@@ -312,50 +331,13 @@ fun NhlFantasyGmAppRoot(
                         }
                     }
                 },
-                bottomBar = {
-                    if (activeOverlay == null) {
-                        NavigationBar(
-                            modifier = Modifier.liquidGlassBar(),
-                            containerColor = if (isLiquidGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
-                            tonalElevation = if (isLiquidGlass) 0.dp else 6.dp
-                        ) {
-                            BottomNavDestination.entries.forEach { dest ->
-                                val selected = selectedBottomNav == dest
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = { selectedBottomNav = dest },
-                                    icon = {
-                                        Icon(
-                                            imageVector = dest.icon,
-                                            contentDescription = dest.label
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = dest.label.uppercase(),
-                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            fontSize = 11.sp
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
             ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                when {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = innerPadding.calculateTopPadding())
+                ) {
+                    when {
                     activeOverlay == "DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT" || activeOverlay == "MULTIPLAYER_DRAFT_JOIN" -> {
                         DraftScreen(
                             draftSession = draftSession,
@@ -411,6 +393,7 @@ fun NhlFantasyGmAppRoot(
                             isSyncing = isSyncing,
                             onRefreshData = { vm.triggerFullSync(silentIfCached = false) },
                             onSaveTheme = { vm.setThemeMode(it) },
+                            onUpdateLiquidGlassOptics = { r, d, b, s -> vm.updateLiquidGlassOptics(r, d, b, s) },
                             onSaveEconomy = { cfg, recalc -> vm.saveEconomySettings(cfg, recalc) },
                             onSaveScoring = { vm.saveScoringWeights(it) },
                             onToggleOfflineSim = { vm.setOfflineSimEnabled(it) },
@@ -581,6 +564,15 @@ fun NhlFantasyGmAppRoot(
                             }
                         }
                     }
+                }
+
+                if (activeOverlay == null) {
+                    LiquidBottomTabs(
+                        selectedDestination = selectedBottomNav,
+                        onSelectDestination = { selectedBottomNav = it },
+                        isLiquidGlass = isLiquidGlass,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
             }

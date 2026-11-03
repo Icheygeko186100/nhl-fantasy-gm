@@ -81,24 +81,17 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Sleeper Matchup Spotlight (Top Hero Card)
         if (nextUserMatchup != null) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidGlassSurface(
-                            shape = RoundedCornerShape(16.dp),
-                            cornerRadius = 16.dp,
-                            enableShader = true
-                        )
-                        .clickable { onNavigateMainTab(1) }
+                LiquidGlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    cornerRadius = 18.dp,
+                    onClick = { onNavigateMainTab(1) }
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -113,7 +106,7 @@ fun HomeScreen(
                                 text = "WEEK ${nextUserMatchup.weekNumber} MATCHUP",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = IceCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
@@ -134,7 +127,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
                                     text = "${nextUserMatchup.awayTeamName} vs ${nextUserMatchup.homeTeamName}",
                                     style = MaterialTheme.typography.titleMedium,
@@ -150,15 +143,22 @@ fun HomeScreen(
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Button(
+                                LiquidButton(
                                     onClick = { onNavigateMainTab(1) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = IceCyan, contentColor = Color(0xFF001F29))
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
                                     Text("Matchup", fontWeight = FontWeight.Bold)
                                 }
                                 if (!nextUserMatchup.isCompleted) {
-                                    FilledTonalButton(onClick = onSimulateNextWeek) {
-                                        Text("Sim")
+                                    LiquidButton(
+                                        onClick = onSimulateNextWeek,
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("Sim", fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

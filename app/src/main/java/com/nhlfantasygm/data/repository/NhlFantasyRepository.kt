@@ -2141,6 +2141,13 @@ class NhlFantasyRepository(
 
     suspend fun updateThemeMode(mode: AppThemeMode) = settingsStore.updateThemeMode(mode)
 
+    suspend fun updateLiquidGlassOptics(
+        refraction: Float,
+        dispersion: Float,
+        blur: Float,
+        specular: Float
+    ) = settingsStore.updateLiquidGlassOptics(refraction, dispersion, blur, specular)
+
     suspend fun updateScoringWeights(weights: ScoringWeights) = settingsStore.updateScoringWeights(weights)
 
     suspend fun updateOfflineSimToggle(enabled: Boolean) = settingsStore.setOfflineSeasonSim(enabled)
