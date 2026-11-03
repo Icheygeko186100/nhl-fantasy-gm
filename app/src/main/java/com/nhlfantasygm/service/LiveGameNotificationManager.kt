@@ -130,12 +130,18 @@ class LiveGameNotificationManager(
             unpinGame(game.gameId, context)
             false
         } else {
-            pinGame(game, context)
-            true
+            if (game.isFinal) {
+                false
+            } else {
+                pinGame(game, context)
+            }
         }
     }
 
-    fun pinGame(game: LiveNhlGameEntity, ctx: Context = context) {
+    fun pinGame(game: LiveNhlGameEntity, ctx: Context = context): Boolean {
+        if (game.isFinal) {
+            return false
+        }
         val updated = _pinnedGameIds.value + game.gameId
         _pinnedGameIds.value = updated
         lastKnownGameEntities[game.gameId] = game
@@ -143,6 +149,7 @@ class LiveGameNotificationManager(
         LiveGameForegroundService.start(ctx, game.gameId)
         startObservingIfPinned()
         checkAndStartLivePolling()
+        return true
     }
 
     fun unpinGame(gameId: Long, ctx: Context = context) {

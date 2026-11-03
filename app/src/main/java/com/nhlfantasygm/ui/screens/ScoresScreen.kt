@@ -59,19 +59,22 @@ fun ScoresScreen(
     }
 
     val handlePinClick: (LiveNhlGameEntity) -> Unit = { game ->
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!hasPermission) {
-                pendingGameToPin = game
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val isCurrentlyPinned = pinnedGameIds.contains(game.gameId)
+        if (isCurrentlyPinned || !game.isFinal) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isCurrentlyPinned) {
+                val hasPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!hasPermission) {
+                    pendingGameToPin = game
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    onTogglePinGame(game)
+                }
             } else {
                 onTogglePinGame(game)
             }
-        } else {
-            onTogglePinGame(game)
         }
     }
 
@@ -379,33 +382,54 @@ private fun NhlGameScorecard(
 
                 Spacer(Modifier.width(8.dp))
 
-                // Pin to Notifications / Now Bar Button
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isPinned) ProfitEmerald.copy(alpha = 0.18f) else Color(0xFF1E293B),
-                    border = BorderStroke(
-                        1.dp,
-                        if (isPinned) ProfitEmerald else Color(0xFF00E5FF).copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.clickable { onTogglePin() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                // Pin to Notifications / Unpin Button or Completed Badge
+                if (isFinal && !isPinned) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.6f))
                     ) {
-                        Icon(
-                            imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
-                            tint = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = if (isPinned) "Pinned • Live" else "Pin Live Score",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPinned) ProfitEmerald else Color(0xFF00E5FF)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Final • Over",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPinned) ProfitEmerald.copy(alpha = 0.18f) else Color(0xFF1E293B),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isPinned) ProfitEmerald else Color(0xFF00E5FF).copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.clickable { onTogglePin() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = if (isPinned) "Unpin Live Score" else "Pin Live Score",
+                                tint = if (isPinned) ProfitEmerald else Color(0xFF00E5FF),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = if (isPinned) "Pinned • Live" else "Pin Live Score",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPinned) ProfitEmerald else Color(0xFF00E5FF)
+                            )
+                        }
                     }
                 }
             }

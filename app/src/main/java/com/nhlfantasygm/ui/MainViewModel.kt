@@ -138,6 +138,11 @@ class MainViewModel(
             _snackbarEvents.tryEmit("Notification manager not ready.")
             return
         }
+        val wasPinned = liveGameNotificationManager.isGamePinned(game.gameId)
+        if (!wasPinned && game.isFinal) {
+            _snackbarEvents.tryEmit("Cannot pin completed games.")
+            return
+        }
         val isNowPinned = liveGameNotificationManager.togglePin(game)
         if (isNowPinned) {
             _snackbarEvents.tryEmit("📌 Pinned ${game.awayAbbrev} vs ${game.homeAbbrev} to Live Notifications.")

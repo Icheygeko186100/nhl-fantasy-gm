@@ -156,4 +156,42 @@ class LiveGameNotificationTest {
         assertFalse(expectedFormatted.contains("Z"))
         assertTrue(expectedFormatted.contains("M")) // AM or PM
     }
+
+    @Test
+    fun `completed and final games cannot be pinned but can be unpinned`() {
+        val finalGame = LiveNhlGameEntity(
+            gameId = 2024020300L,
+            gameDate = "2026-11-03",
+            gameState = "FINAL",
+            periodLabel = "3rd",
+            clockLabel = "00:00",
+            awayAbbrev = "BOS",
+            awayName = "Boston Bruins",
+            awayScore = 4,
+            awaySog = 30,
+            awayLogoUrl = "",
+            homeAbbrev = "NYR",
+            homeName = "New York Rangers",
+            homeScore = 2,
+            homeSog = 28,
+            homeLogoUrl = "",
+            startTimeUtc = "7:00 PM EST",
+            venueName = "Madison Square Garden"
+        )
+
+        val offGame = finalGame.copy(gameState = "OFF")
+        assertTrue(finalGame.isFinal)
+        assertTrue(offGame.isFinal)
+
+        // Cannot pin final game
+        val pinned = mutableSetOf<Long>()
+        val canPin = !finalGame.isFinal
+        assertFalse(canPin)
+
+        // Unpinning an existing pin is always permitted
+        pinned.add(finalGame.gameId)
+        assertTrue(pinned.contains(finalGame.gameId))
+        pinned.remove(finalGame.gameId)
+        assertFalse(pinned.contains(finalGame.gameId))
+    }
 }

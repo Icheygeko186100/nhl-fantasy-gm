@@ -347,8 +347,8 @@ data class LiveNhlGameEntity(
     val startTimeUtc: String,
     val venueName: String
 ) {
-    val isLive: Boolean get() = gameState == "LIVE" || gameState == "CRIT"
-    val isFinal: Boolean get() = gameState == "FINAL" || gameState == "OFF"
+    val isLive: Boolean get() = gameState.equals("LIVE", ignoreCase = true) || gameState.equals("CRIT", ignoreCase = true)
+    val isFinal: Boolean get() = gameState.equals("FINAL", ignoreCase = true) || gameState.equals("OFF", ignoreCase = true)
 }
 
 @Entity(tableName = "news_headlines")
