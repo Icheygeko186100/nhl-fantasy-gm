@@ -42,6 +42,12 @@ class LiveNhlDataSourceVerificationTest {
 
         // Verify scoreboard, injuries, and news feeds
         assertTrue(remote.fetchScoreboardNow().isSuccess)
+        val smartScoreboardRes = remote.fetchSmartScoreboard()
+        assertTrue("Smart scoreboard must succeed: ${smartScoreboardRes.exceptionOrNull()}", smartScoreboardRes.isSuccess)
+        val smartDto = smartScoreboardRes.getOrThrow()
+        assertTrue("Smart scoreboard must return valid currentDate: ${smartDto.currentDate}", smartDto.currentDate.isNotBlank())
+        assertTrue("Smart scoreboard should include gameWeek with days", smartDto.gameWeek.isNotEmpty())
+
         assertTrue(remote.fetchEspnInjuries().isSuccess)
         assertTrue(remote.fetchEspnNews().isSuccess)
     }

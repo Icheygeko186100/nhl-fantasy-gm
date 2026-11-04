@@ -1,4 +1,4 @@
-﻿package com.nhlfantasygm.data.remote
+package com.nhlfantasygm.data.remote
 
 import kotlinx.serialization.Serializable
 
@@ -119,8 +119,18 @@ data class StatsRestGoalieSummaryDto(
 // --- Scoreboard & Live Game Boxscore ---
 @Serializable
 data class ScoreboardResponseDto(
+    val prevDate: String = "",
     val currentDate: String = "",
+    val nextDate: String = "",
+    val gameWeek: List<GameWeekDayDto> = emptyList(),
     val games: List<ScoreboardGameDto> = emptyList()
+)
+
+@Serializable
+data class GameWeekDayDto(
+    val date: String = "",
+    val dayAbbrev: String = "",
+    val numberOfGames: Int = 0
 )
 
 @Serializable

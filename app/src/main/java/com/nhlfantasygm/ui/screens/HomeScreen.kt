@@ -646,11 +646,19 @@ private fun LiveNhlGameCard(
                             color = ProfitEmerald,
                             fontWeight = FontWeight.ExtraBold
                         )
-                    } else {
+                    } else if (game.isFinal) {
                         Text(
                             text = game.periodLabel,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        val startTimeLabel = if (game.startTimeUtc.isNotBlank()) formatHomeGameStartTime(game.startTimeUtc) else game.periodLabel
+                        Text(
+                            text = startTimeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = IceCyan,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -748,5 +756,16 @@ private fun TopPerformerCompactCard(
                 }
             }
         }
+    }
+}
+
+private fun formatHomeGameStartTime(isoUtc: String): String {
+    return try {
+        val instant = java.time.Instant.parse(isoUtc)
+        val localTime = java.time.ZonedDateTime.ofInstant(instant, java.time.ZoneId.systemDefault())
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+        localTime.format(formatter)
+    } catch (_: Exception) {
+        "Scheduled"
     }
 }

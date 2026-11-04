@@ -1,9 +1,10 @@
-﻿package com.nhlfantasygm.ui
+package com.nhlfantasygm.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nhlfantasygm.data.local.*
+import com.nhlfantasygm.data.remote.GameWeekDayDto
 import com.nhlfantasygm.data.repository.NhlFantasyRepository
 import com.nhlfantasygm.domain.*
 import com.nhlfantasygm.model.*
@@ -200,6 +201,28 @@ class MainViewModel(
     val liveGamesState: StateFlow<List<LiveNhlGameEntity>> = repository.liveGamesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val scoreboardDateState: StateFlow<String> = repository.scoreboardDateFlow
+    val gameWeekState: StateFlow<List<GameWeekDayDto>> = repository.gameWeekFlow
+
+    private val _selectedScoreDate = MutableStateFlow<String?>(null)
+    val selectedScoreDateState: StateFlow<String?> = _selectedScoreDate.asStateFlow()
+
+    private val _customDateGames = MutableStateFlow<List<LiveNhlGameEntity>?>(null)
+    val customDateGamesState: StateFlow<List<LiveNhlGameEntity>?> = _customDateGames.asStateFlow()
+
+    val scoresDisplayGamesState: StateFlow<List<LiveNhlGameEntity>> = combine(
+        liveGamesState,
+        _customDateGames,
+        _selectedScoreDate,
+        scoreboardDateState
+    ) { liveGames, customGames, selectedDate, todayDate ->
+        if (selectedDate == null || selectedDate == todayDate) {
+            liveGames
+        } else {
+            customGames ?: emptyList()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val newsHeadlinesState: StateFlow<List<NewsHeadlineEntity>> = repository.newsHeadlinesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -384,17 +407,40 @@ class MainViewModel(
         }
     }
 
-    fun refreshLiveScores() {
+    fun refreshLiveScores(dateStr: String? = null) {
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
-            val res = repository.refreshLiveScoresOnly()
+            val target = dateStr ?: _selectedScoreDate.value
+            val res = repository.refreshLiveScoresOnly(target)
             _isSyncing.value = false
             res.onSuccess { games ->
                 _hasSyncedLiveThisSession.value = true
                 _snackbarEvents.tryEmit("Refreshed $games NHL games & live player boxscores.")
             }.onFailure { err ->
                 _snackbarEvents.tryEmit("Scoreboard refresh failed: ${err.message ?: "Offline"}")
+            }
+        }
+    }
+
+    fun selectScoreboardDate(dateStr: String?) {
+        val today = repository.scoreboardDateFlow.value
+        if (dateStr == null || dateStr == today) {
+            _selectedScoreDate.value = null
+            _customDateGames.value = null
+            return
+        }
+        _selectedScoreDate.value = dateStr
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val res = repository.fetchScoreboardForDate(dateStr)
+            _isSyncing.value = false
+            res.onSuccess { dto ->
+                _customDateGames.value = repository.mapScoreboardGames(dto)
+                val count = dto.games.size
+                _snackbarEvents.tryEmit("Loaded $count NHL games for $dateStr")
+            }.onFailure { err ->
+                _snackbarEvents.tryEmit("Failed to load scores for $dateStr: ${err.message ?: "Offline"}")
             }
         }
     }

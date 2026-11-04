@@ -10,10 +10,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.PushPin
@@ -37,6 +40,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import com.nhlfantasygm.data.local.LiveNhlGameEntity
+import com.nhlfantasygm.data.remote.GameWeekDayDto
 import com.nhlfantasygm.model.DataFreshnessState
 import com.nhlfantasygm.ui.components.*
 import com.nhlfantasygm.ui.theme.*
@@ -44,10 +48,14 @@ import com.nhlfantasygm.ui.theme.*
 @Composable
 fun ScoresScreen(
     liveGames: List<LiveNhlGameEntity>,
+    gameWeek: List<GameWeekDayDto> = emptyList(),
+    selectedDate: String? = null,
+    todayDate: String = "",
     pinnedGameIds: Set<Long> = emptySet(),
     isSyncing: Boolean,
     freshness: DataFreshnessState,
     onRefreshScores: () -> Unit,
+    onSelectDate: (String?) -> Unit = {},
     onTogglePinGame: (LiveNhlGameEntity) -> Unit = {},
     onUnpinAllGames: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -93,6 +101,7 @@ fun ScoresScreen(
     ) {
         // Top Header Info
         item {
+            val isViewingToday = selectedDate == null || selectedDate == todayDate
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -100,17 +109,20 @@ fun ScoresScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Today's NHL Scoreboard",
+                        text = if (isViewingToday) "Today's NHL Scoreboard" else "NHL Scoreboard • ${formatDateHeader(selectedDate ?: "")}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Pin live games to Android notifications & lockscreen (Android 12+)",
+                        text = if (isViewingToday) "Pin live games to Android notifications & lockscreen (Android 12+)"
+                        else "Viewing past/upcoming schedule • Tap TODAY to return",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF7E8B9F)
+                        color = if (isViewingToday) Color(0xFF7E8B9F) else Color(0xFF00E5FF)
                     )
                 }
 
@@ -130,6 +142,160 @@ fun ScoresScreen(
                             contentDescription = "Refresh Scores",
                             tint = Color(0xFF00E5FF)
                         )
+                    }
+                }
+            }
+        }
+
+        // Multi-day Date Selector Strip
+        if (gameWeek.isNotEmpty()) {
+            item {
+                val activeDate = selectedDate ?: todayDate.ifBlank {
+                    try {
+                        java.time.LocalDate.now(java.time.ZoneId.of("America/New_York")).toString()
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
+                val currentIndex = gameWeek.indexOfFirst { it.date == activeDate }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Prev Button [<]
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF131D31),
+                        border = BorderStroke(1.dp, Color(0xFF223555)),
+                        modifier = Modifier.bouncingClickable {
+                            val prevDate = if (currentIndex > 0) {
+                                gameWeek[currentIndex - 1].date
+                            } else {
+                                try {
+                                    java.time.LocalDate.parse(activeDate).minusDays(1).toString()
+                                } catch (_: Exception) { null }
+                            }
+                            if (prevDate != null) onSelectDate(prevDate)
+                        }
+                    ) {
+                        Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Previous Day",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Horizontal Scrollable Day Chips
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(gameWeek, key = { it.date }) { day ->
+                            val isSelected = (day.date == activeDate)
+                            val isToday = (day.date == todayDate)
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = when {
+                                    isSelected -> Color(0xFF00E5FF).copy(alpha = 0.16f)
+                                    isToday -> Color(0xFF1E293B)
+                                    else -> Color(0xFF131D31)
+                                },
+                                border = BorderStroke(
+                                    1.dp,
+                                    when {
+                                        isSelected -> Color(0xFF00E5FF)
+                                        isToday -> Color(0xFF38BDF8).copy(alpha = 0.6f)
+                                        else -> Color(0xFF223555)
+                                    }
+                                ),
+                                modifier = Modifier.bouncingClickable {
+                                    if (isToday) onSelectDate(null) else onSelectDate(day.date)
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    if (isToday) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isSelected) Color(0xFF00E5FF) else Color(0xFF38BDF8))
+                                        )
+                                    }
+
+                                    Text(
+                                        text = if (isToday) "TODAY" else day.dayAbbrev,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSelected || isToday) FontWeight.Black else FontWeight.Bold,
+                                        color = when {
+                                            isSelected -> Color(0xFF00E5FF)
+                                            isToday -> Color(0xFF38BDF8)
+                                            else -> Color(0xFF94A3B8)
+                                        }
+                                    )
+
+                                    Text(
+                                        text = formatShortDate(day.date),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isSelected) Color.White else Color(0xFF64748B),
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    if (day.numberOfGames > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color(0xFF0B1220),
+                                            modifier = Modifier.padding(start = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "${day.numberOfGames}",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) Color(0xFF00E5FF) else Color(0xFF7E8B9F),
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Next Button [>]
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF131D31),
+                        border = BorderStroke(1.dp, Color(0xFF223555)),
+                        modifier = Modifier.bouncingClickable {
+                            val nextDate = if (currentIndex in 0 until gameWeek.size - 1) {
+                                gameWeek[currentIndex + 1].date
+                            } else {
+                                try {
+                                    java.time.LocalDate.parse(activeDate).plusDays(1).toString()
+                                } catch (_: Exception) { null }
+                            }
+                            if (nextDate != null) onSelectDate(nextDate)
+                        }
+                    ) {
+                        Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Next Day",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -201,14 +367,15 @@ fun ScoresScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text("🏒", fontSize = 36.sp)
+                        val isToday = selectedDate == null || selectedDate == todayDate
                         Text(
-                            text = "No Games Scheduled Today",
+                            text = if (isToday) "No Games Scheduled Today" else "No Games Scheduled (${selectedDate ?: ""})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Tap refresh to check for upcoming NHL game schedules and live updates.",
+                            text = "Tap refresh or choose another date to check NHL schedules and live updates.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF7E8B9F),
                             textAlign = TextAlign.Center
@@ -460,5 +627,23 @@ private fun formatCardStartTime(isoUtc: String): String {
         localTime.format(formatter)
     } catch (e: Exception) {
         isoUtc.take(16).replace("T", " ")
+    }
+}
+
+private fun formatShortDate(dateStr: String): String {
+    return try {
+        val date = java.time.LocalDate.parse(dateStr)
+        date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d", java.util.Locale.US))
+    } catch (_: Exception) {
+        dateStr.takeLast(5)
+    }
+}
+
+private fun formatDateHeader(dateStr: String): String {
+    return try {
+        val date = java.time.LocalDate.parse(dateStr)
+        date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM d", java.util.Locale.US))
+    } catch (_: Exception) {
+        dateStr
     }
 }

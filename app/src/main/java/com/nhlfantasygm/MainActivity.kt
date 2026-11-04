@@ -127,6 +127,10 @@ fun NhlFantasyGmAppRoot(
     val matchups by vm.matchupsState.collectAsStateWithLifecycle()
     val seasonArchives by vm.seasonArchivesState.collectAsStateWithLifecycle()
     val liveGames by vm.liveGamesState.collectAsStateWithLifecycle()
+    val scoresDisplayGames by vm.scoresDisplayGamesState.collectAsStateWithLifecycle()
+    val gameWeek by vm.gameWeekState.collectAsStateWithLifecycle()
+    val selectedScoreDate by vm.selectedScoreDateState.collectAsStateWithLifecycle()
+    val scoreboardTodayDate by vm.scoreboardDateState.collectAsStateWithLifecycle()
     val newsHeadlines by vm.newsHeadlinesState.collectAsStateWithLifecycle()
     val syncStatus by vm.syncStatusState.collectAsStateWithLifecycle()
     val freshness by vm.dataFreshnessState.collectAsStateWithLifecycle()
@@ -489,11 +493,15 @@ fun NhlFantasyGmAppRoot(
                     }
                     BottomNavDestination.SCORES -> {
                         ScoresScreen(
-                            liveGames = liveGames,
+                            liveGames = scoresDisplayGames,
+                            gameWeek = gameWeek,
+                            selectedDate = selectedScoreDate,
+                            todayDate = scoreboardTodayDate,
                             pinnedGameIds = pinnedGameIds,
                             isSyncing = isSyncing,
                             freshness = freshness,
                             onRefreshScores = { vm.refreshLiveScores() },
+                            onSelectDate = { dateStr -> vm.selectScoreboardDate(dateStr) },
                             onTogglePinGame = { vm.togglePinGame(it) },
                             onUnpinAllGames = { vm.unpinAllGames() }
                         )

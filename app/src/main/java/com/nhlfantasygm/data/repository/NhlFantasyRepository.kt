@@ -1,4 +1,4 @@
-﻿package com.nhlfantasygm.data.repository
+package com.nhlfantasygm.data.repository
 
 import androidx.room.withTransaction
 import com.nhlfantasygm.data.local.*
@@ -10,6 +10,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -54,6 +57,12 @@ class NhlFantasyRepository(
     val liveGamesFlow: Flow<List<LiveNhlGameEntity>> = dao.observeLiveNhlGames()
     val newsHeadlinesFlow: Flow<List<NewsHeadlineEntity>> = dao.observeNewsHeadlines()
     val syncStatusFlow: Flow<SyncStatusEntity?> = dao.observeSyncStatus()
+
+    private val _scoreboardDateFlow = MutableStateFlow<String>("")
+    val scoreboardDateFlow: StateFlow<String> = _scoreboardDateFlow.asStateFlow()
+
+    private val _gameWeekFlow = MutableStateFlow<List<GameWeekDayDto>>(emptyList())
+    val gameWeekFlow: StateFlow<List<GameWeekDayDto>> = _gameWeekFlow.asStateFlow()
 
     fun observeTeamRoster(teamId: String): Flow<List<PlayerEntity>> = dao.observeTeamRoster(teamId)
 
@@ -184,7 +193,7 @@ class NhlFantasyRepository(
                 val prevSkaterRtDeferred = async { remote.fetchSkaterRealtimeBulk(prevSeasonId).getOrNull() }
                 val prevGoalieSumDeferred = async { remote.fetchGoalieSummaryBulk(prevSeasonId).getOrNull() }
 
-                val scoreboardDeferred = async { remote.fetchScoreboardNow().getOrNull() }
+                val scoreboardDeferred = async { remote.fetchSmartScoreboard().getOrNull() }
                 val injuriesDeferred = async { remote.fetchEspnInjuries().getOrNull() }
                 val newsDeferred = async { remote.fetchEspnNews().getOrNull() }
 
@@ -441,6 +450,10 @@ class NhlFantasyRepository(
                 }
                 if (syncBundle.scoreboard != null) {
                     dao.replaceLiveGamesAtomically(liveGames)
+                    _scoreboardDateFlow.value = syncBundle.scoreboard.currentDate
+                    if (syncBundle.scoreboard.gameWeek.isNotEmpty()) {
+                        _gameWeekFlow.value = syncBundle.scoreboard.gameWeek
+                    }
                 }
                 if (syncBundle.news != null && newsArticles.isNotEmpty()) {
                     dao.replaceNewsAtomically(newsArticles)
@@ -480,12 +493,17 @@ class NhlFantasyRepository(
 
     /**
      * Quick refresh of today's live NHL scoreboard & in-game boxscores.
+     * Optionally takes a [targetDate]. If null, uses smart date detection.
      */
-    suspend fun refreshLiveScoresOnly(): Result<Int> = syncMutex.withLock {
+    suspend fun refreshLiveScoresOnly(targetDate: String? = null): Result<Int> = syncMutex.withLock {
         val now = System.currentTimeMillis()
         val prevStatus = dao.getSyncStatusOnce() ?: SyncStatusEntity()
         return runCatching {
-            val scoreboard = remote.fetchScoreboardNow().getOrThrow()
+            val scoreboard = remote.fetchSmartScoreboard(targetDate).getOrThrow()
+            _scoreboardDateFlow.value = scoreboard.currentDate
+            if (scoreboard.gameWeek.isNotEmpty()) {
+                _gameWeekFlow.value = scoreboard.gameWeek
+            }
             val liveGames = mapScoreboardGames(scoreboard)
             val activeIds = scoreboard.games
                 .filter { it.gameState != "FUT" && it.gameState != "PRE" }
@@ -545,6 +563,9 @@ class NhlFantasyRepository(
             liveGames.size
         }
     }
+
+    suspend fun fetchScoreboardForDate(dateStr: String): Result<ScoreboardResponseDto> =
+        remote.fetchScoreboardForDate(dateStr)
 
     /**
      * Fetches and caches a player's career historical stats (`seasonTotals`) & `last5Games` game log.
@@ -2352,7 +2373,7 @@ class NhlFantasyRepository(
         return result
     }
 
-    private fun mapScoreboardGames(dto: ScoreboardResponseDto?): List<LiveNhlGameEntity> {
+    fun mapScoreboardGames(dto: ScoreboardResponseDto?): List<LiveNhlGameEntity> {
         if (dto == null) return emptyList()
         return dto.games.map { g ->
             val pNum = g.periodDescriptor?.number ?: 1

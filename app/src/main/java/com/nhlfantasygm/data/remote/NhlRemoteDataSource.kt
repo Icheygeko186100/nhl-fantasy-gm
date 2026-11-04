@@ -1,4 +1,4 @@
-﻿package com.nhlfantasygm.data.remote
+package com.nhlfantasygm.data.remote
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -70,6 +70,58 @@ class NhlRemoteDataSource(
 
     suspend fun fetchScoreboardNow(): Result<ScoreboardResponseDto> =
         getJson("$NHL_WEB_BASE/score/now")
+
+    suspend fun fetchScoreboardForDate(dateStr: String): Result<ScoreboardResponseDto> =
+        getJson("$NHL_WEB_BASE/score/$dateStr")
+
+    /**
+     * Resolves the smart scoreboard for live display:
+     * - If [targetDate] is explicitly provided, loads that specific date.
+     * - Otherwise determines today's Eastern Time date (official NHL schedule date).
+     * - Inspects /score/now: if any game is currently LIVE or CRIT, uses now.
+     * - If no game is live and /score/now is pointing to a past date (typical morning/early afternoon NHL API behavior),
+     *   loads today's calendar date so games playing today are shown immediately.
+     */
+    suspend fun fetchSmartScoreboard(targetDate: String? = null): Result<ScoreboardResponseDto> {
+        if (!targetDate.isNullOrBlank()) {
+            return fetchScoreboardForDate(targetDate)
+        }
+        val todayEastern = try {
+            java.time.LocalDate.now(java.time.ZoneId.of("America/New_York")).toString()
+        } catch (_: Exception) {
+            ""
+        }
+        val nowRes = fetchScoreboardNow()
+        val nowDto = nowRes.getOrNull()
+        if (nowDto != null) {
+            val hasActiveLiveGame = nowDto.games.any {
+                it.gameState.equals("LIVE", ignoreCase = true) || it.gameState.equals("CRIT", ignoreCase = true)
+            }
+            if (hasActiveLiveGame || (todayEastern.isNotBlank() && nowDto.currentDate >= todayEastern)) {
+                return nowRes
+            }
+        }
+        if (todayEastern.isNotBlank()) {
+            val todayRes = fetchScoreboardForDate(todayEastern)
+            val todayDto = todayRes.getOrNull()
+            if (todayDto != null && (todayDto.games.isNotEmpty() || nowDto == null)) {
+                return todayRes
+            }
+        }
+        val todayLocal = try {
+            java.time.LocalDate.now().toString()
+        } catch (_: Exception) {
+            ""
+        }
+        if (todayLocal.isNotBlank() && todayLocal != todayEastern) {
+            val localRes = fetchScoreboardForDate(todayLocal)
+            val localDto = localRes.getOrNull()
+            if (localDto != null && localDto.games.isNotEmpty()) {
+                return localRes
+            }
+        }
+        return if (nowRes.isSuccess) nowRes else fetchScoreboardForDate(todayEastern)
+    }
 
     suspend fun fetchGameBoxscore(gameId: Long): Result<GameBoxscoreResponseDto> =
         getJson("$NHL_WEB_BASE/gamecenter/$gameId/boxscore")
