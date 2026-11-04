@@ -1,0 +1,29 @@
+{
+  "name": "NHL Fantasy GM",
+  "short_name": "NHL GM",
+  "description": "Real-time NHL Fantasy General Manager, Live Scoreboard, CAD Salary Cap & Cross-Platform Multiplayer Drafts for iOS & Web.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0E17",
+  "theme_color": "#0D1424",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
